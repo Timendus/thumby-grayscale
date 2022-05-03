@@ -27,7 +27,7 @@ class Grayscale:
         self.gsArray3 = bytearray(int(self.width * self.height / 8))
         self.gsBuffer3 = FrameBuffer(self.gsArray3, self.width, self.height, MONO_VLSB)
 
-        _thread.start_new_thread(self._thread4C_new, ())
+        _thread.start_new_thread(self._gsThread, ())
 
     def stop(self):
         self.state = Grayscale.STOPPING
@@ -118,38 +118,7 @@ class Grayscale:
             gs3[i] = gs1[i] & gs2[i]
 
     @micropython.viper
-    def _thread4C(self):
-        disp = thumby.display.display
-        while self.state == Grayscale.RUNNING:
-            # self.dispBuffer.blit(self.gsBuffer1, 0, 0, self.width, self.height)
-            # self._show()
-
-            disp.cs(1)
-            disp.dc(1)
-            disp.cs(0)
-            disp.spi.write(self.gsArray1)
-            disp.cs(1)
-
-            sleep_us(self.displayRefreshTime)
-
-            sleep_us(9500) # Waste about equal time (roughly measured)
-            sleep_us(self.displayRefreshTime)
-
-            # self.dispBuffer.blit(self.gsBuffer2, 0, 0, self.width, self.height)
-            # self._show()
-
-            disp.cs(1)
-            disp.dc(1)
-            disp.cs(0)
-            disp.spi.write(self.gsArray2)
-            disp.cs(1)
-
-            sleep_us(self.displayRefreshTime)
-
-        self.state = Grayscale.STOPPED
-
-    @micropython.viper
-    def _thread4C_new(self):
+    def _gsThread(self):
         disp = thumby.display.display
         buf1 = self.gsArray1
         buf2 = self.gsArray2
@@ -167,7 +136,7 @@ class Grayscale:
             disp.cs(1)
 
             # Wait until half of displayRefreshTime has passed
-            halfTime = refreshTime >> 2
+            halfTime = refreshTime // 2
             while int(ticks_us() - startTime) < halfTime:
                 sleep_us(10)
 
@@ -179,7 +148,7 @@ class Grayscale:
             disp.cs(1)
 
             # Wait until three quarters of displayRefreshTime has passed
-            threeQuartersTime = (refreshTime >> 2) + (refreshTime >> 4)
+            threeQuartersTime = 3 * refreshTime//4
             while int(ticks_us() - startTime) < threeQuartersTime:
                 sleep_us(10)
 
