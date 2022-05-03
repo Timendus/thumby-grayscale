@@ -17,11 +17,6 @@ class Grayscale:
         self.height = thumby.display.height
         self._loadConfig()
 
-        self.dispBuffer = FrameBuffer(
-            thumby.display.display.buffer,
-            self.width, self.height, MONO_VLSB
-        )
-
         self.gsArray1 = bytearray(int(self.width * self.height / 8))
         self.gsBuffer1 = FrameBuffer(self.gsArray1, self.width, self.height, MONO_VLSB)
         self.gsArray2 = bytearray(int(self.width * self.height / 8))
@@ -167,12 +162,3 @@ class Grayscale:
                 sleep_us(10)
 
         self.state = Grayscale.STOPPED
-
-    @micropython.viper
-    def _show(self):
-        disp=thumby.display.display
-        disp.cs(1)
-        disp.dc(1)
-        disp.cs(0)
-        disp.spi.write(disp.buffer)
-        disp.cs(1)
