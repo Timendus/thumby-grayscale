@@ -73,6 +73,8 @@ and white, make sure you stop the grayscale library:
 gs.stop()
 ```
 
+See [`GrayscaleTest.py`](./GrayscaleTest.py) for a complete example.
+
 ![Calibration screen on the Thumby](./images/calibration_on_thumby.jpeg)
 <br/>_Showing the calibration screen_
 
