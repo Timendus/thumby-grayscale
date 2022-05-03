@@ -5,9 +5,11 @@ import _thread
 import ujson
 
 class Grayscale:
-    STOPPED = const(0)
-    RUNNING = const(1)
+    STOPPED  = const(0)
+    RUNNING  = const(1)
     STOPPING = const(2)
+
+    CONFIG_FILE = '/grayscale.conf.json'
 
     def __init__(self):
         self.state = Grayscale.RUNNING
@@ -58,25 +60,25 @@ class Grayscale:
         while True:
             self.drawSprite(background_layer1, background_layer2)
             handle_layer1.x = handle_layer2.x = 50
-            handle_layer1.y = handle_layer2.y = 6 + 16 - (self.displayRefreshTime / 100000 * (22 - 6)) # Between 6 and 22
+            handle_layer1.y = handle_layer2.y = 6 + 16 - (self.config["displayRefreshTime"] / 100000 * (22 - 6)) # Between 6 and 22
             self.drawSprite(handle_layer1, handle_layer2)
-            self.gsBuffer1.text(f'{self.displayRefreshTime:04d}'[:3], 41, 27, 0)
-            self.gsBuffer2.text(f'{self.displayRefreshTime:04d}'[:3], 41, 27, 0)
-            self.gsBuffer3.text(f'{self.displayRefreshTime:04d}'[:3], 41, 27, 0)
+            self.gsBuffer1.text(f'{self.config["displayRefreshTime"]:04d}'[:3], 41, 27, 0)
+            self.gsBuffer2.text(f'{self.config["displayRefreshTime"]:04d}'[:3], 41, 27, 0)
+            self.gsBuffer3.text(f'{self.config["displayRefreshTime"]:04d}'[:3], 41, 27, 0)
             while not self._anyKeyPressed():
                 pass
             if thumby.buttonU.pressed():
-                self.displayRefreshTime += 100
+                self.config["displayRefreshTime"] += 100
             if thumby.buttonD.pressed():
-                self.displayRefreshTime -= 100
+                self.config["displayRefreshTime"] -= 100
             if thumby.buttonL.pressed():
-                self.displayRefreshTime -= 10
+                self.config["displayRefreshTime"] -= 10
             if thumby.buttonR.pressed():
-                self.displayRefreshTime += 10
-            if self.displayRefreshTime < 0:
-                self.displayRefreshTime = 0
-            if self.displayRefreshTime > 99990:
-                self.displayRefreshTime = 99990
+                self.config["displayRefreshTime"] += 10
+            if self.config["displayRefreshTime"] < 0:
+                self.config["displayRefreshTime"] = 0
+            if self.config["displayRefreshTime"] > 99990:
+                self.config["displayRefreshTime"] = 99990
             if thumby.buttonA.pressed() or thumby.buttonB.pressed():
                 self._saveConfig()
                 return
@@ -91,19 +93,20 @@ class Grayscale:
 
     def _loadConfig(self):
         try:
-            with open('/grayscale.conf.json', 'r') as file:
-                config = ujson.load(file)
-                self.displayRefreshTime = config["displayRefreshTime"]
+            with open(Grayscale.CONFIG_FILE, 'r') as file:
+                self.config = ujson.load(file)
         except:
-            self.displayRefreshTime = 25000
+            self.config = {
+                "displayRefreshTime": 27400
+            }
             self._saveConfig()
 
     def _saveConfig(self):
-        with open('/grayscale.conf.json', 'w') as file:
-            config = {
-                "displayRefreshTime": self.displayRefreshTime
-            }
-            file.write(ujson.dumps(config))
+        try:
+            with open(Grayscale.CONFIG_FILE, 'w') as file:
+                ujson.dump(self.config, file)
+        except Exception as err:
+            print("Couldn't write to config file:", err)
 
     def _anyKeyPressed(self):
         return thumby.buttonU.pressed() or thumby.buttonD.pressed() or thumby.buttonL.pressed() or thumby.buttonR.pressed() or thumby.buttonA.pressed() or thumby.buttonB.pressed()
@@ -126,7 +129,7 @@ class Grayscale:
 
         while self.state == Grayscale.RUNNING:
             startTime = ticks_us()
-            refreshTime = int(self.displayRefreshTime)
+            refreshTime = int(self.config["displayRefreshTime"])
 
             # Show first buffer (dark gray & black)
             disp.cs(1)
