@@ -44,12 +44,17 @@ gs = grayscale.Grayscale()
 ```
 
 Now we can use the drawing functions from the grayscale library (instead of the
-Thumby library) to put grayscale sprites on the screen:
+Thumby library) to put grayscale sprites on the screen. Nearly all functions of
+`thumby.display` are available to use. Make sure you use `grayscale.Sprite`
+instead of `thumby.Sprite` though:
 
 ```python
-sprite = gs.Sprite(16, 16, bytearray([ <layer 1> ]), bytearray([ <layer 2> ]))
-sprite.x = 28
-sprite.y = 12
+sprite = grayscale.Sprite(
+  16, 16, # Size
+  bytearray([ ... ]), # Layer 1 data
+  bytearray([ ... ]), # Layer 2 data
+  28, 12  # Position
+)
 gs.drawSprite(sprite)
 ```
 
