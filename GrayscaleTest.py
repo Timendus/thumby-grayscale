@@ -8,8 +8,62 @@ from framebuf import FrameBuffer, MONO_VLSB
 from time import ticks_ms, sleep_us, sleep_ms
 import grayscale
 
+def waitKey():
+    while thumby.buttonA.pressed() or thumby.buttonB.pressed():
+        pass
+    while not thumby.buttonA.pressed() or thumby.buttonB.pressed():
+        pass
 
-####### Image data
+thumby.audio.stop()
+thumby.display.setFPS(0)
+thumby.display.brightness(28)
+
+gs = grayscale.Grayscale()
+
+# Legend of Zelda sprites demo
+
+pot = grayscale.Sprite(
+    16, 16,        # Dimensions
+    bytearray([    # Layer 1 data
+        255,31,143,115,253,141,6,6,6,6,141,253,115,143,31,255,
+        255,240,193,142,132,13,59,123,123,59,13,132,142,193,240,255
+    ]),
+    bytearray([    # Layer 2 data
+        255,31,15,3,1,17,8,8,8,8,17,1,3,15,31,255,
+        255,240,206,176,185,112,64,18,18,64,112,185,176,206,240,255
+    ]),
+    40, 5         # Position
+)
+
+link = grayscale.Sprite(
+    16, 16,        # Dimensions
+    bytearray([    # Layer 1 data
+        255,207,183,123,13,246,238,14,182,218,29,205,163,39,247,255,
+        255,255,255,71,24,93,67,88,91,3,59,1,126,255,255,255
+    ]),
+    bytearray([    # Layer 2 data
+        255,207,135,3,1,240,196,4,146,216,13,197,163,39,247,255,
+        255,255,255,71,0,64,65,88,89,1,17,0,126,255,255,255
+    ]),
+    16, 16         # Position
+)
+
+gs.fill(gs.WHITE)
+gs.drawSprite(pot)
+pot.x = 56
+gs.drawSprite(pot)
+gs.drawSprite(link)
+waitKey()
+
+# Drawing primitives demo
+
+gs.fill(gs.BLACK)
+gs.drawFilledRectangle(16, 9, 40, 21, gs.WHITE)
+gs.drawText("Hello", 18, 11, gs.LIGHTGRAY)
+gs.drawText("world!", 18, 19, gs.DARKGRAY)
+waitKey()
+
+# Full screen images demo
 
 girlSprite = grayscale.Sprite(72, 40, bytearray([
     0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,10,68,21,106,149,74,41,2,120,254,254,255,255,255,255,127,127,127,126,126,120,48,64,0,0,0,0,0,0,0,0,2,1,4,18,9,38,217,36,84,160,80,128,0,0,0,0,0,0,0,0,0,0,0,0,0,
@@ -38,23 +92,6 @@ parrotSprite = grayscale.Sprite(72, 40, bytearray([
     16,48,52,36,100,227,64,64,128,193,35,1,42,33,112,108,96,222,248,242,204,187,73,255,251,223,227,252,91,247,94,121,252,252,191,254,189,252,223,126,249,253,250,252,255,253,122,244,57,222,42,156,170,78,24,165,74,16,68,16,192,16,161,71,24,250,232,128,104,128,4,184,
     201,130,199,100,67,239,1,150,241,112,114,124,249,182,8,85,251,239,191,253,251,223,253,239,191,250,231,155,79,192,211,253,239,125,255,127,221,127,175,127,255,95,255,111,255,124,247,188,235,188,234,77,176,74,181,66,121,68,169,66,244,191,74,150,45,127,191,255,236,128,253,123
 ]))
-
-
-###### Code to make it run
-
-def waitKey():
-    while thumby.buttonA.pressed() or thumby.buttonB.pressed():
-        pass
-    while not thumby.buttonA.pressed() or thumby.buttonB.pressed():
-        pass
-
-thumby.audio.stop()
-thumby.display.setFPS(0)
-thumby.display.brightness(28)
-
-gs = grayscale.Grayscale()
-
-gs.calibrationTool()
 
 gs.drawSprite(girlSprite)
 waitKey()
