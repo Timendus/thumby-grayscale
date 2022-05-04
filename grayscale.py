@@ -72,9 +72,15 @@ class Grayscale:
     CONFIG_FILE = '/grayscale.conf.json'
 
     def __init__(self):
+        self.BLACK     = 0
+        self.LIGHTGRAY = 1
+        self.DARKGRAY  = 2
+        self.WHITE     = 3
+
         self.state = Grayscale.RUNNING
         self.width = thumby.display.width
         self.height = thumby.display.height
+
         self._loadConfig()
 
         self.gsBuffer1 = gsBuffer(self.width, self.height)
@@ -190,7 +196,7 @@ class Grayscale:
             handle.x = 50
             handle.y = 6 + 16 - (self.config["displayRefreshTime"] / 100000 * (22 - 6)) # Between 6 and 22
             self.drawSprite(handle)
-            self.drawText(f'{self.config["displayRefreshTime"]:05d}'[:4], 42, 27, 0)
+            self.drawText(f'{self.config["displayRefreshTime"]:05d}'[:4], 42, 27, self.BLACK)
             while not self._anyKeyPressed():
                 pass
             if thumby.buttonU.pressed():
