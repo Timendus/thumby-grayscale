@@ -22,6 +22,8 @@ show the grayscale effect.
 
 **Note that this library DOES NOT WORK in the emulator AT ALL!**
 
+### Getting it going
+
 First, import the library. Copy the file [`grayscale.py`](./grayscale.py) to
 your project directory and import like so, making sure you change the path to
 the directory of your game:
@@ -43,20 +45,57 @@ thumby.display.setFPS(0)
 gs = grayscale.Grayscale()
 ```
 
+### Drawing in four colours
+
 Now we can use the drawing functions from the grayscale library (instead of the
-Thumby library) to put grayscale sprites on the screen. Nearly all functions of
+Thumby library) to put grayscale images on the screen. Nearly all functions of
 `thumby.display` are available to use. Make sure you use `grayscale.Sprite`
 instead of `thumby.Sprite` though:
 
 ```python
-sprite = grayscale.Sprite(
-  16, 16, # Size
-  bytearray([ ... ]), # Layer 1 data
-  bytearray([ ... ]), # Layer 2 data
-  28, 12  # Position
+pot = grayscale.Sprite(
+    16, 16,        # Dimensions
+    bytearray([    # Layer 1 data
+        255,31,143,115,253,141,6,6,6,6,141,253,115,143,31,255,
+        255,240,193,142,132,13,59,123,123,59,13,132,142,193,240,255
+    ]),
+    bytearray([    # Layer 2 data
+        255,31,15,3,1,17,8,8,8,8,17,1,3,15,31,255,
+        255,240,206,176,185,112,64,18,18,64,112,185,176,206,240,255
+    ]),
+    12, 28         # Position
 )
-gs.drawSprite(sprite)
+gs.drawSprite(pot)
 ```
+
+As you can see, sprites are now composed of two layers instead of just a single
+bitmap. The colour of a pixel is defined by the values in both layers:
+
+| Layer 1 | Layer 2 | Colour                                                                     |
+|---------|---------|----------------------------------------------------------------------------|
+| 0       | 0       | ![#000000](https://via.placeholder.com/15/000000/000000?text=+) Black      |
+| 0       | 1       | ![#999999](https://via.placeholder.com/15/999999/000000?text=+) Light gray |
+| 1       | 0       | ![#666666](https://via.placeholder.com/15/666666/000000?text=+) Dark gray  |
+| 1       | 1       | ![#DDDDDD](https://via.placeholder.com/15/DDDDDD/000000?text=+) White      |
+
+The text, line drawing and filling functions can now be used with four colours
+instead of two, like so:
+
+```python
+gs.fill(gs.BLACK)
+gs.drawFilledRectangle(16, 9, 40, 21, gs.WHITE)
+gs.drawText("Hello", 18, 11, gs.LIGHTGRAY)
+gs.drawText("world!", 18, 19, gs.DARKGRAY)
+```
+
+| Constant       | Value | Colour                                                                     |
+| -------------- |-------|----------------------------------------------------------------------------|
+| `gs.BLACK`     | 0     | ![#000000](https://via.placeholder.com/15/000000/000000?text=+) Black      |
+| `gs.LIGHTGRAY` | 1     | ![#999999](https://via.placeholder.com/15/999999/000000?text=+) Light gray |
+| `gs.DARKGRAY`  | 2     | ![#666666](https://via.placeholder.com/15/666666/000000?text=+) Dark gray  |
+| `gs.WHITE`     | 3     | ![#DDDDDD](https://via.placeholder.com/15/DDDDDD/000000?text=+) White      |
+
+### Calibration
 
 You can let the user calibrate the timing with a little graphical interface by
 calling:
@@ -65,11 +104,14 @@ calling:
 gs.calibrationTool()
 ```
 
-See photo below.
-
 The timing values are saved to a configuration file in the Thumby root as
 `grayscale.conf.json` and loaded the next time your grayscale application (or
 someone else's) starts.
+
+![Calibration screen on the Thumby](./images/calibration_on_thumby.jpeg)
+<br/>_Showing the calibration screen_
+
+### Stopping
 
 If your application exits back to the menu, or you want to switch back to black
 and white, make sure you stop the grayscale library:
@@ -79,9 +121,6 @@ gs.stop()
 ```
 
 See [`GrayscaleTest.py`](./GrayscaleTest.py) for a complete example.
-
-![Calibration screen on the Thumby](./images/calibration_on_thumby.jpeg)
-<br/>_Showing the calibration screen_
 
 # Implementation notes and links
 
