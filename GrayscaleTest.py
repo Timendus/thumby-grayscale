@@ -20,6 +20,11 @@ thumby.display.brightness(28)
 
 gs = grayscale.Grayscale()
 
+grayscale.Calibration(gs).start()
+gs.stop()
+gs.saveConfig()
+gs = grayscale.Grayscale()
+
 # Legend of Zelda sprites demo
 
 pot = grayscale.Sprite(
