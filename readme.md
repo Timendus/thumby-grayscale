@@ -7,10 +7,6 @@ The Thumby display is intended to only be able to show black and white images.
 But we can flicker images really quickly and get a pretty convincing grayscale
 picture 📺✨
 
-**Warning:** This is very experimental and may hurt your Thumby or just randomly
-crash. It will also probably drain the battery pretty quickly. Don't rely on
-this for anything if you're not the adventurous type 😉
-
 ![Showing a grayscale image on the Thumby](./images/girl_on_thumby.jpeg)
 <br/>_Showing a photo in four colours on the Thumby (horizontal banding is a result of the timing difference between the display and the camera)_
 
@@ -30,16 +26,26 @@ library:
 * The [code.thumby.us](https://code.thumby.us) Thumby emulator is not
   multithreaded. That's why this library **DOES NOT WORK in the emulator AT
   ALL!**
-* Touching flash memory while the grayscale thread is running sometimes crashes
-  the Thumby. The solution is to stop the grayscale thread, save your file or
-  whatever you want to do, and restart the thread.
+* Touching flash memory while the grayscale thread is running sometimes
+  **crashes the Thumby**. The solution is to stop the grayscale thread, save
+  your file or whatever you want to do, and then restart the thread.
 * The framerate limiting logic of `thumby.display` (`update` and `setFPS`) has
   not (yet) been implemented. This is not a technical limitation or anything,
   I've just been too lazy so far 😉
 * The grayscale image is not perfectly stable. Depending on the timing settings
   and the image shown, it flickers a bit and some banding may occur. This
-  may not be suitable for people who suffer from epilepsy. Also, you may just
-  find the quality unsuitable for your application.
+  may **not be suitable for people who suffer from epilepsy**. Also, you may
+  just find the quality unsuitable for your application.
+* This is very experimental and **may hurt your Thumby's display** long term. I
+  don't know for sure that it doesn't, it hasn't been used for long enough to
+  know. It will also probably **drain the battery** pretty quickly.
+
+So in short: Don't rely on this library for anything if you're not the
+adventurous type 😉
+
+Having said all that, let's get some grayscale going! 😄 See
+[`GrayscaleTest.py`](./GrayscaleTest.py) for a complete example, or keep
+reading for more of a guide.
 
 ### Getting it going
 
@@ -124,11 +130,12 @@ gs.gsBuffer1.buffer
 gs.gsBuffer2.buffer
 ```
 
-You can wrap these in a `FrameBuffer` if you want, and manipulate the
-`bytearray`s to your heart's content. Make sure you call `gs._joinBuffers()`
-after you are done manipulating though, so the colours are correct. See below at
-[On colours and the "third layer"](#on-colours-and-the-third-layer) for more
-background information.
+You can wrap these in a
+[`FrameBuffer`](https://docs.micropython.org/en/v1.15/library/framebuf.html) if
+you want, and manipulate the `bytearray`s to your heart's content. Make sure you
+call `gs._joinBuffers()` after you are done manipulating though, so the colours
+are correct. See below at [On colours and the "third
+layer"](#on-colours-and-the-third-layer) for more background information.
 
 ### Calibration
 
@@ -166,8 +173,6 @@ and white, make sure you stop the grayscale library's thread:
 gs.stop()
 ```
 
-See [`GrayscaleTest.py`](./GrayscaleTest.py) for a complete example.
-
 # Implementation notes and links
 
 The Thumby uses the SSD1306 display driver chip. According to some people in the
@@ -186,8 +191,7 @@ This library gains some speed by bypassing the [Thumby
 library](https://github.com/TinyCircuits/TinyCircuits-Thumby-Code-Editor/blob/master/ThumbyGames/lib/thumby.py)
 and even the [wrapper library for the display
 driver](https://github.com/micropython/micropython/blob/master/drivers/display/ssd1306.py).
-That is why the code that shows a
-[`FrameBuffer`](https://docs.micropython.org/en/v1.15/library/framebuf.html) on
+That is why the code that shows the buffers on
 the display may seem a bit foreign.
 
 For more information on the multithreading used, see the [regular Python
