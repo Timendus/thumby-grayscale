@@ -1,14 +1,15 @@
 # Grayscale on Thumby
 
-This is an attempt at a little library to bring **grayscale** to the
+This is a little library to bring **grayscale** to the
 [Thumby](https://thumby.us/)!
 
 The Thumby display is intended to only be able to show black and white images.
 But we can flicker images really quickly and get a pretty convincing grayscale
-picture 📺
+picture 📺✨
 
 **Warning:** This is very experimental and may hurt your Thumby or just randomly
-*crash. Don't rely on this for anything 😉
+crash. It will also probably drain the battery pretty quickly. Don't rely on
+this for anything if you're not the adventurous type 😉
 
 ![Showing a grayscale image on the Thumby](./images/girl_on_thumby.jpeg)
 <br/>_Showing a photo in four colours on the Thumby (horizontal banding is a result of the timing difference between the display and the camera)_
@@ -16,11 +17,29 @@ picture 📺
 ## How to use
 
 This library uses a thread running on the second core of the Thumby CPU, so that
-the first core remains fully available to your game or program using grayscale.
-You do not have to do any special magic in your main loop or rendering logic to
-show the grayscale effect.
+the first core remains fully available to your game or program. You do not have
+to do any special magic in your main loop or rendering logic to show the
+grayscale effect. Just import and start the library, and use its functions
+instead of the functions of `thumby.display`.
 
-**Note that this library DOES NOT WORK in the emulator AT ALL!**
+### Caveats
+
+Before we get started, make sure you are aware of the limitations of this
+library:
+
+* The [code.thumby.us](https://code.thumby.us) Thumby emulator is not
+  multithreaded. That's why this library **DOES NOT WORK in the emulator AT
+  ALL!**
+* Touching flash memory while the grayscale thread is running sometimes crashes
+  the Thumby. The solution is to stop the grayscale thread, save your file or
+  whatever you want to do, and restart the thread.
+* The framerate limiting logic of `thumby.display` (`update` and `setFPS`) has
+  not (yet) been implemented. This is not a technical limitation or anything,
+  I've just been too lazy so far 😉
+* The grayscale image is not perfectly stable. Depending on the timing settings
+  and the image shown, it flickers a bit and some banding may occur. This
+  may not be suitable for people who suffer from epilepsy. Also, you may just
+  find the quality unsuitable for your application.
 
 ### Getting it going
 
@@ -95,18 +114,45 @@ gs.drawText("world!", 18, 19, gs.DARKGRAY)
 | `gs.DARKGRAY`  | 2     | ![#666666](https://via.placeholder.com/15/666666/000000?text=+) Dark gray  |
 | `gs.WHITE`     | 3     | ![#DDDDDD](https://via.placeholder.com/15/DDDDDD/000000?text=+) White      |
 
+### Using the buffers directly
+
+For more advanced stuff, you may want to access the display buffers for the two
+grayscale layers directly. These exist in two `bytearray`s at these locations:
+
+```python
+gs.gsBuffer1.buffer
+gs.gsBuffer2.buffer
+```
+
+You can wrap these in a `FrameBuffer` if you want, and manipulate the
+`bytearray`s to your heart's content. Make sure you call `gs._joinBuffers()`
+after you are done manipulating though, so the colours are correct. See below at
+[On colours and the "third layer"](#on-colours-and-the-third-layer) for more
+background information.
+
 ### Calibration
 
 You can let the user calibrate the timing with a little graphical interface by
 calling:
 
 ```python
-gs.calibrationTool()
+grayscale.Calibration(gs).start()
 ```
 
-The timing values are saved to a configuration file in the Thumby root as
-`grayscale.conf.json` and loaded the next time your grayscale application (or
-someone else's) starts.
+The current timing values can be saved to a configuration file in the Thumby
+root as `grayscale.conf.json` and loaded the next time your grayscale
+application (or someone else's) starts. To do so, you have to stop the grayscale
+thread, save the current configuration and restart the thread.
+
+```python
+gs.stop()
+gs.saveConfig()
+gs = grayscale.Grayscale()
+```
+
+As mentioned above under [caveats](#caveats), you have to stop the grayscale
+thread every time you do anything touching the flash memory to prevent crashes,
+including saving the grayscale configuration.
 
 ![Calibration screen on the Thumby](./images/calibration_on_thumby.jpeg)
 <br/>_Showing the calibration screen_
@@ -114,7 +160,7 @@ someone else's) starts.
 ### Stopping
 
 If your application exits back to the menu, or you want to switch back to black
-and white, make sure you stop the grayscale library:
+and white, make sure you stop the grayscale library's thread:
 
 ```python
 gs.stop()
@@ -148,7 +194,7 @@ For more information on the multithreading used, see the [regular Python
 documentation on
 threading](https://docs.python.org/3.7/library/_thread.html#module-_thread).
 
-## On colours
+## On colours and the "third layer"
 
 The grays are a little too light when just naively showing one layer for two
 thirds of the time and the other layer for one third of the time. The "dark"
@@ -156,53 +202,9 @@ gray is more like a medium gray and the light gray is close to invisible. Which
 is why I opted to have three "layers": showing layer one for half the time,
 layer two for a quarter of the time and **both layers** (as the "third layer")
 for the last quarter. This effectively shows dark gray for three quarters of the
-time and light gray for half the time.
+time and light gray for half the time, which gives a much better result.
 
-## What kinda worked
-
-```
-Display image (9500)
-sleep 1500
-sleep 9500
-sleep 1500
-Display image (9500)
-sleep 1500
-------- +
-33.000 usec -> 33ms -> 30,3030fps
-```
-
-## What didn't work
-
-Just spam images as fast as possible, basically this in a loop:
-
-```python
-disp.cs(1)
-disp.dc(1)
-disp.cs(0)
-disp.spi.write(buf1)
-disp.cs(1)
-
-disp.cs(1)
-disp.dc(1)
-disp.cs(0)
-disp.spi.write(buf1)
-disp.cs(1)
-
-disp.cs(1)
-disp.dc(1)
-disp.cs(0)
-disp.spi.write(buf2)
-disp.cs(1)
-
-disp.cs(1)
-disp.dc(1)
-disp.cs(0)
-disp.spi.write(buf3)
-disp.cs(1)
-```
-
-This just shows flickering black and white images. Probably because the
-frequency of the display driver chip interferes with the frequency of this loop
-in interesting ways. That shows, however, that we can send images to the driver
-chip very quickly, and we're in no way limited by the speed of the display when
-writing images.
+The third layer is managed automatically, and is only of concern if you're
+bypassing the GraphicsClass functions and manipulating the GsBuffers yourself.
+In that case, call `gs._joinBuffers()` after manipulating the first two layers
+to generate the third.
