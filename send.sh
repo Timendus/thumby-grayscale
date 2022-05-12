@@ -5,6 +5,7 @@
 
 export AMPY_PORT=`ls /dev/tty.usbmodem*`
 
+ampy mkdir /Games/GrayscaleTest
 ampy put grayscale.py /Games/GrayscaleTest/grayscale.py
 ampy put GrayscaleTest.py /Games/GrayscaleTest/GrayscaleTest.py
 ampy run launch.py
