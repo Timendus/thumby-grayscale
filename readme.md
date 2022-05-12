@@ -7,7 +7,7 @@ The Thumby display is intended to only be able to show black and white images.
 But we can flicker images really quickly and get a pretty convincing grayscale
 picture 📺✨
 
-![Showing a grayscale image on the Thumby](./images/girl_on_thumby.jpeg)
+![Showing a grayscale image on the Thumby](./pictures/girl_on_thumby.jpeg)
 <br/>_Showing a photo in four colours on the Thumby_
 
 ## How to use
@@ -145,7 +145,7 @@ calling:
 grayscale.Calibration(gs).start()
 ```
 
-![Calibration screen on the Thumby](./images/calibration_on_thumby.jpeg)
+![Calibration screen on the Thumby](./pictures/calibration_on_thumby.jpeg)
 <br/>_Showing the calibration screen_
 
 In this calibration screen, up and down change the grayscale timing in large
