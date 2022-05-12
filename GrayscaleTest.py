@@ -1,4 +1,11 @@
-# Fix import path so it finds the grayscale module
+# Grayscale library demo
+#
+# Shows four different screens, then reboots. Cycle through the screens by
+# pressing A (rightmost button), go to calibration screen by pressing B (lefmost
+# button). When on calibration screen, up and down change the grayscale timing
+# with large intervals, left and right with small intervals, A or B confirms.
+
+# Fix import path so it finds the grayscale library
 import sys
 sys.path.append('/Games/GrayscaleTest')
 
@@ -8,57 +15,30 @@ from framebuf import FrameBuffer, MONO_VLSB
 from time import ticks_ms, sleep_us, sleep_ms
 import grayscale
 
-def waitKey():
-    while thumby.buttonA.pressed() or thumby.buttonB.pressed():
-        pass
-    while not thumby.buttonA.pressed() or thumby.buttonB.pressed():
-        pass
+# Initialization
 
 thumby.audio.stop()
 thumby.display.setFPS(0)
 thumby.display.brightness(28)
-
 gs = grayscale.Grayscale()
 
-grayscale.Calibration(gs).start()
-gs.stop()
-gs.saveConfig()
-gs = grayscale.Grayscale()
+# Helper functions
 
-# Legend of Zelda sprites demo
+def configureGrayscale():
+    global gs
+    grayscale.Calibration(gs).start()
+    gs.stop()
+    gs.saveConfig()
+    gs = grayscale.Grayscale()
 
-pot = grayscale.Sprite(
-    16, 16,        # Dimensions
-    bytearray([    # Layer 1 data
-        255,31,143,115,253,141,6,6,6,6,141,253,115,143,31,255,
-        255,240,193,142,132,13,59,123,123,59,13,132,142,193,240,255
-    ]),
-    bytearray([    # Layer 2 data
-        255,31,15,3,1,17,8,8,8,8,17,1,3,15,31,255,
-        255,240,206,176,185,112,64,18,18,64,112,185,176,206,240,255
-    ]),
-    40, 5         # Position
-)
-
-link = grayscale.Sprite(
-    16, 16,        # Dimensions
-    bytearray([    # Layer 1 data
-        255,207,183,123,13,246,238,14,182,218,29,205,163,39,247,255,
-        255,255,255,71,24,93,67,88,91,3,59,1,126,255,255,255
-    ]),
-    bytearray([    # Layer 2 data
-        255,207,135,3,1,240,196,4,146,216,13,197,163,39,247,255,
-        255,255,255,71,0,64,65,88,89,1,17,0,126,255,255,255
-    ]),
-    16, 16         # Position
-)
-
-gs.fill(gs.WHITE)
-gs.drawSprite(pot)
-pot.x = 56
-gs.drawSprite(pot)
-gs.drawSprite(link)
-waitKey()
+def waitKey():
+    while thumby.buttonA.pressed() or thumby.buttonB.pressed():
+        pass
+    while True:
+        if thumby.buttonA.pressed():
+            return
+        if thumby.buttonB.pressed():
+            return configureGrayscale()
 
 # Drawing primitives demo
 
@@ -67,6 +47,42 @@ gs.drawFilledRectangle(16, 9, 40, 21, gs.WHITE)
 gs.drawText("Hello", 18, 11, gs.LIGHTGRAY)
 gs.drawText("world!", 18, 19, gs.DARKGRAY)
 waitKey()
+
+# Bouncing cat demo
+
+while thumby.buttonA.pressed() or thumby.buttonB.pressed():
+    pass
+
+cat = grayscale.Sprite(
+    12, 9,         # Dimensions
+    bytearray([    # Layer 1 data
+        175,7,169,254,237,255,191,157,190,233,255,175,
+        1,1,0,1,1,1,1,1,1,1,1,1
+    ]),
+    bytearray([    # Layer 2 data
+        255,255,87,7,3,3,3,67,3,7,7,255,
+        1,1,1,0,0,0,0,0,0,0,1,1
+    ]),
+    30, 15         # Position
+)
+
+dx = dy = 1
+while True:
+    gs.fill(gs.WHITE)
+    gs.drawSprite(cat)
+    cat.x += dx
+    cat.y += dy
+    if cat.x == 0 or cat.x == 60:
+        dx = -1 * dx
+    if cat.y == 0 or cat.y == 31:
+        dy = -1 * dy
+    sleep_ms(50)
+
+    if thumby.buttonA.pressed():
+        break
+    if thumby.buttonB.pressed():
+        configureGrayscale()
+        break;
 
 # Full screen images demo
 

@@ -78,19 +78,19 @@ Thumby library) to put grayscale images on the screen. Nearly all functions of
 instead of `thumby.Sprite` though:
 
 ```python
-pot = grayscale.Sprite(
-    16, 16,        # Dimensions
+cat = grayscale.Sprite(
+    12, 9,         # Dimensions
     bytearray([    # Layer 1 data
-        255,31,143,115,253,141,6,6,6,6,141,253,115,143,31,255,
-        255,240,193,142,132,13,59,123,123,59,13,132,142,193,240,255
+        175,7,169,254,237,255,191,157,190,233,255,175,
+        1,1,0,1,1,1,1,1,1,1,1,1
     ]),
     bytearray([    # Layer 2 data
-        255,31,15,3,1,17,8,8,8,8,17,1,3,15,31,255,
-        255,240,206,176,185,112,64,18,18,64,112,185,176,206,240,255
+        255,255,87,7,3,3,3,67,3,7,7,255,
+        1,1,1,0,0,0,0,0,0,0,1,1
     ]),
-    12, 28         # Position
+    30, 15         # Position
 )
-gs.drawSprite(pot)
+gs.drawSprite(cat)
 ```
 
 As you can see, sprites are now composed of two layers instead of just a single
