@@ -8,7 +8,7 @@ But we can flicker images really quickly and get a pretty convincing grayscale
 picture 📺✨
 
 ![Showing a grayscale image on the Thumby](./images/girl_on_thumby.jpeg)
-<br/>_Showing a photo in four colours on the Thumby (horizontal banding is a result of the timing difference between the display and the camera)_
+<br/>_Showing a photo in four colours on the Thumby_
 
 ## How to use
 
@@ -146,10 +146,11 @@ calling:
 grayscale.Calibration(gs).start()
 ```
 
-The current timing values can be saved to a configuration file in the Thumby
-root as `grayscale.conf.json` and loaded the next time your grayscale
-application (or someone else's) starts. To do so, you have to stop the grayscale
-thread, save the current configuration and restart the thread.
+The timing values are loaded from a configuration file in the Thumby root
+(`grayscale.conf.json`) whenever a grayscale application starts. If you want to
+save the new configuration so it survives a restart / reboot, after using the
+calibration screen, you have to stop the grayscale thread, save the current
+configuration and restart the thread:
 
 ```python
 gs.stop()
@@ -157,9 +158,9 @@ gs.saveConfig()
 gs = grayscale.Grayscale()
 ```
 
-As mentioned above under [caveats](#caveats), you have to stop the grayscale
+_As mentioned above under [caveats](#caveats), you have to stop the grayscale
 thread every time you do anything touching the flash memory to prevent crashes,
-including saving the grayscale configuration.
+including saving the grayscale configuration._
 
 ![Calibration screen on the Thumby](./images/calibration_on_thumby.jpeg)
 <br/>_Showing the calibration screen_
