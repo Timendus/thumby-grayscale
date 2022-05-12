@@ -3,7 +3,7 @@
 # Shows four different screens, then reboots. Cycle through the screens by
 # pressing A (rightmost button), go to calibration screen by pressing B (lefmost
 # button). When on calibration screen, up and down change the grayscale timing
-# with large intervals, left and right with small intervals, A or B confirms.
+# in large increments, left and right in small increments, A or B confirms.
 
 # Fix import path so it finds the grayscale library
 import sys

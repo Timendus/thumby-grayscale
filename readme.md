@@ -145,6 +145,16 @@ calling:
 grayscale.Calibration(gs).start()
 ```
 
+![Calibration screen on the Thumby](./images/calibration_on_thumby.jpeg)
+<br/>_Showing the calibration screen_
+
+In this calibration screen, up and down change the grayscale timing in large
+increments, left and right in small increments, A or B confirms the new setting.
+The value shown on screen is the tens of microseconds that a full update cycle
+should take. So in the photo, the screen is cycled every 27,4 milliseconds (or
+36,5 frames per second), which is the default value. This value seems to give me
+pretty stable results.
+
 The timing values are loaded from a configuration file in the Thumby root
 (`grayscale.conf.json`) whenever a grayscale application starts. If you want to
 save the new configuration so it survives a restart / reboot, after using the
@@ -160,9 +170,6 @@ gs = grayscale.Grayscale()
 _As mentioned above under [caveats](#caveats), you have to stop the grayscale
 thread every time you do anything touching the flash memory to prevent crashes,
 including saving the grayscale configuration._
-
-![Calibration screen on the Thumby](./images/calibration_on_thumby.jpeg)
-<br/>_Showing the calibration screen_
 
 ### Stopping
 
