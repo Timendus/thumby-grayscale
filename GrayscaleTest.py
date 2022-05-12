@@ -7,7 +7,7 @@
 
 # Fix import path so it finds the grayscale library
 import sys
-sys.path.append('/Games/GrayscaleTest')
+sys.path.insert(0, "/".join(__file__.split("/")[0:-1]))
 
 # Do imports
 import thumby

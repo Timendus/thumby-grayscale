@@ -50,13 +50,12 @@ reading for more of a guide.
 ### Getting it going
 
 First, import the library. Copy the file [`grayscale.py`](./grayscale.py) to
-your project directory and import like so, making sure you change the path to
-the directory of your game:
+your project directory and import like so:
 
 ```python
-# Fix import path so it finds the grayscale module
+# Fix import path so it finds the grayscale library
 import sys
-sys.path.append('/Games/<Your game name here>')
+sys.path.insert(0, "/".join(__file__.split("/")[0:-1]))
 
 # Do actual import
 import grayscale
