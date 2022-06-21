@@ -95,12 +95,12 @@ gs.drawSprite(cat)
 As you can see, sprites are now composed of two layers instead of just a single
 bitmap. The colour of a pixel is defined by the values in both layers:
 
-| Layer 1 | Layer 2 | Colour                                                                     |
-|---------|---------|----------------------------------------------------------------------------|
-| 0       | 0       | ![#000000](https://via.placeholder.com/15/000000/000000?text=+) Black      |
-| 0       | 1       | ![#999999](https://via.placeholder.com/15/999999/000000?text=+) Light gray |
-| 1       | 0       | ![#666666](https://via.placeholder.com/15/666666/000000?text=+) Dark gray  |
-| 1       | 1       | ![#DDDDDD](https://via.placeholder.com/15/DDDDDD/000000?text=+) White      |
+| Layer 1 | Layer 2 | Colour                                           |
+|---------|---------|--------------------------------------------------|
+| 0       | 0       | ![#000000](./pictures/black.png) Black           |
+| 0       | 1       | ![#999999](./pictures/lightgray.png) Light gray  |
+| 1       | 0       | ![#666666](./pictures/darkgray.png) Dark gray    |
+| 1       | 1       | ![#DDDDDD](./pictures/white.png) White           |
 
 The text, line drawing and filling functions can now be used with four colours
 instead of two, like so:
@@ -112,12 +112,12 @@ gs.drawText("Hello", 18, 11, gs.LIGHTGRAY)
 gs.drawText("world!", 18, 19, gs.DARKGRAY)
 ```
 
-| Constant       | Value | Colour                                                                     |
-| -------------- |-------|----------------------------------------------------------------------------|
-| `gs.BLACK`     | 0     | ![#000000](https://via.placeholder.com/15/000000/000000?text=+) Black      |
-| `gs.LIGHTGRAY` | 1     | ![#999999](https://via.placeholder.com/15/999999/000000?text=+) Light gray |
-| `gs.DARKGRAY`  | 2     | ![#666666](https://via.placeholder.com/15/666666/000000?text=+) Dark gray  |
-| `gs.WHITE`     | 3     | ![#DDDDDD](https://via.placeholder.com/15/DDDDDD/000000?text=+) White      |
+| Constant       | Value | Colour                                           |
+| -------------- |-------|--------------------------------------------------|
+| `gs.BLACK`     | 0     | ![#000000](./pictures/black.png) Black           |
+| `gs.LIGHTGRAY` | 1     | ![#999999](./pictures/lightgray.png) Light gray  |
+| `gs.DARKGRAY`  | 2     | ![#666666](./pictures/darkgray.png) Dark gray    |
+| `gs.WHITE`     | 3     | ![#DDDDDD](./pictures/white.png) White           |
 
 ### Using the buffers directly
 
