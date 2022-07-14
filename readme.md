@@ -44,8 +44,8 @@ So in short: Don't rely on this library for anything if you're not the
 adventurous type 😉
 
 Having said all that, let's get some grayscale going! 😄 See
-[`GrayscaleTest.py`](./GrayscaleTest.py) for a complete example, or keep
-reading for more of a guide.
+[`GrayscaleTest.py`](./Games/GrayscaleTest/GrayscaleTest.py) for a complete
+example, or keep reading for more of a guide.
 
 ### Getting it going
 
