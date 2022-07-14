@@ -1,6 +1,6 @@
 import thumby
 from framebuf import FrameBuffer, MONO_VLSB
-from time import sleep_us, ticks_us
+from time import sleep_us, ticks_us, ticks_diff
 import _thread
 import ujson
 import os
@@ -203,6 +203,7 @@ class Grayscale:
         buf1 = self.gsBuffer1.buffer
         buf2 = self.gsBuffer2.buffer
         buf3 = self.gsBuffer3.buffer
+        refreshTime:int = 0
 
         while self.state == Grayscale.RUNNING:
             startTime = ticks_us()
@@ -216,8 +217,7 @@ class Grayscale:
             disp.cs(1)
 
             # Wait until half of displayRefreshTime has passed
-            halfTime = refreshTime // 2
-            while int(ticks_us() - startTime) < halfTime:
+            while int(ticks_diff(ticks_us(), startTime)) < refreshTime // 2:
                 sleep_us(10)
 
             # Show second buffer (light gray & black)
@@ -228,8 +228,7 @@ class Grayscale:
             disp.cs(1)
 
             # Wait until three quarters of displayRefreshTime has passed
-            threeQuartersTime = 3 * refreshTime//4
-            while int(ticks_us() - startTime) < threeQuartersTime:
+            while int(ticks_diff(ticks_us(), startTime)) < 3 * refreshTime//4:
                 sleep_us(10)
 
             # Show third buffer (light gray, dark gray & black)
@@ -240,7 +239,7 @@ class Grayscale:
             disp.cs(1)
 
             # Wait until all of displayRefreshTime has passed
-            while int(ticks_us() - startTime) < refreshTime:
+            while int(ticks_diff(ticks_us(), startTime)) < refreshTime:
                 sleep_us(10)
 
         self.state = Grayscale.STOPPED
