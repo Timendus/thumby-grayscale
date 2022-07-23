@@ -19,19 +19,14 @@ import grayscale
 
 thumby.audio.stop()
 thumby.display.setFPS(0)
-#thumby.display.brightness(28)
 gs = grayscale.Grayscale()
 
 # Helper functions
 
 def waitKey():
-    while thumby.buttonA.pressed() or thumby.buttonB.pressed():
-        pass
-    while True:
-        if thumby.buttonA.pressed():
-            return
-        if thumby.buttonB.pressed():
-            return
+    while thumby.actionPressed(): pass
+    while not thumby.actionPressed(): pass
+    while thumby.actionPressed(): pass
 
 # Drawing primitives demo
 
@@ -43,9 +38,6 @@ gs.update()
 waitKey()
 
 # Bouncing cat demo
-
-while thumby.buttonA.pressed() or thumby.buttonB.pressed():
-    pass
 
 cat = grayscale.Sprite(
     12, 9,         # Dimensions
@@ -73,9 +65,7 @@ while True:
     gs.update()
     sleep_ms(50)
 
-    if thumby.buttonA.pressed():
-        break
-    if thumby.buttonB.pressed():
+    if thumby.actionPressed():
         break
 
 # Full screen images demo
