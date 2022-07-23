@@ -21,13 +21,16 @@ def check_upython_version(major, minor, release):
 
 is_v1_19_1_plus = check_upython_version(1, 19, 1)
 
-# When the Thumby boots up, it runs at 48MHz. main.py will switch this to 125MHz before starting a game, but
-# anything run in the code editor will be running at the slower frequency.
-# We require a bit more grunt to run the GPU loop fast enough, and even more if we're on 1.18 still and need to
-# keep calling gc.collect().
-# We'll assume that if this code has been imported, then the greyscale display code is going to be used and go
-# ahead and change the frequency now. The alternative is to wait until object creation time, but prior to that
-# other objects could have been instantiated that rely on knowing what the runtime CPU frequency will be.
+# When the Thumby boots up, it runs at 48MHz. main.py will switch this to 125MHz
+# before starting a game, but anything run in the code editor will be running at
+# the slower frequency.
+# We require a bit more grunt to run the GPU loop fast enough, and even more if
+# we're on 1.18 still and need to keep calling gc.collect().
+# We'll assume that if this code has been imported, then the greyscale display
+# code is going to be used and go ahead and change the frequency now. The
+# alternative is to wait until object creation time, but prior to that other
+# objects could have been instantiated that rely on knowing what the runtime CPU
+# frequency will be.
 if is_v1_19_1_plus:
     if freq() < 125000000:
         freq(125000000)
@@ -95,11 +98,12 @@ class Sprite:
 
 # You can't use const() to define class properties, so we'll defined them here
 
-# The times below are calculated using phase 1 and phase 2 pre-charge periods of 1 clock.
-# Note that although the SSD1306 datasheet doesn't state it, the 50 clocks period per row
-# _is_ a constant (datasheets for similar controllers from the same manufacturer state this).
-# 530kHz is taken to be the highest nominal clock frequency.
-# The calculations shown provide the value in seconds, which can be multiplied by 1e6 to provide a microsecond value.
+# The times below are calculated using phase 1 and phase 2 pre-charge periods of
+# 1 clock. Note that although the SSD1306 datasheet doesn't state it, the 50
+# clocks period per row _is_ a constant (datasheets for similar controllers from
+# the same manufacturer state this). 530kHz is taken to be the highest nominal
+# clock frequency. The calculations shown provide the value in seconds, which
+# can be multiplied by 1e6 to provide a microsecond value.
 Grayscale_pre_frame_time_us    = const( 785)     # 8 rows: ( 8*(1+1+50)) / 530e3 seconds
 Grayscale_frame_time_us        = const(4709)     # 48 rows: (49*(1+1+50)) / 530e3 seconds
 
@@ -149,27 +153,34 @@ class Grayscale:
         self._buffer2 = bytearray(self.buffer_size)
         self._buffer3 = bytearray(self.buffer_size)
 
-        # The method used to create reduced flicker greyscale using the SSD1306 uses certain
-        # assumptions about the internal behaviour of the controller. Even though the behaviour
-        # seems to back up those assumptions, it is possible that the assumptions are incorrect
-        # but the desired result is achieved anyway. To simplify things, the following comments
-        # are written as if the assumptions _are_ correct.
+        # The method used to create reduced flicker greyscale using the SSD1306
+        # uses certain assumptions about the internal behaviour of the
+        # controller. Even though the behaviour seems to back up those
+        # assumptions, it is possible that the assumptions are incorrect but the
+        # desired result is achieved anyway. To simplify things, the following
+        # comments are written as if the assumptions _are_ correct.
 
-        # We will keep the display sychronised by resetting the row counter before each frame
-        # and then outputting a frame of 58 rows. This is 18 rows past the 40 of the actual display.
+        # We will keep the display sychronised by resetting the row counter
+        # before each frame and then outputting a frame of 58 rows. This is 18
+        # rows past the 40 of the actual display.
 
-        # Prior to loading in the frame we park the row counter at row 0 and wait for the nominal time
-        # for 9 rows to be output. This (hopefully) provides enough time for the row counter to reach row 0
-        # before it sticks there. (Note: recent test indicate that perhaps the current row actually jumps before parking)
-        # The 'parking' is done by setting the number of rows (aka 'multiplex ratio') to 1 row. This is
-        # an invalid setting according to the datasheet but seems to still have the desired effect.
+        # Prior to loading in the frame we park the row counter at row 0 and
+        # wait for the nominal time for 9 rows to be output. This (hopefully)
+        # provides enough time for the row counter to reach row 0 before it
+        # sticks there. (Note: recent test indicate that perhaps the current row
+        # actually jumps before parking) The 'parking' is done by setting the
+        # number of rows (aka 'multiplex ratio') to 1 row. This is an invalid
+        # setting according to the datasheet but seems to still have the desired
+        # effect.
         self.pre_frame_cmds = bytearray([0xa8,0, 0xd3,52])
-        # Once the frame has been loaded into the display controller's GDRAM, we set the controller to
-        # output 58 rows, and then delay for the nominal time for 49 rows to be output.
-        # Considering the 18 row 'buffer space' after the real 40 rows, that puts us halfway between the
-        # end of the display, and the row at which it would wrap around.
-        # By having 9 rows either side of the nominal timing, we can absorb any variation in the frequency
-        # of the display controller's RC oscillator as well as any timing offsets introduced by the Python code.
+        # Once the frame has been loaded into the display controller's GDRAM, we
+        # set the controller to output 58 rows, and then delay for the nominal
+        # time for 49 rows to be output. Considering the 18 row 'buffer space'
+        # after the real 40 rows, that puts us halfway between the end of the
+        # display, and the row at which it would wrap around. By having 9 rows
+        # either side of the nominal timing, we can absorb any variation in the
+        # frequency of the display controller's RC oscillator as well as any
+        # timing offsets introduced by the Python code.
         self.post_frame_cmds = bytearray([0xd3,40+(64-58), 0xa8,58-1])
 
         # We enhance the greys by modulating the contrast
@@ -191,9 +202,10 @@ class Grayscale:
             brightnessVal = brightnessVals[brightnessSetting]
             self.post_frame_adj = [bytearray([0x81,brightnessVal>>4]), bytearray([0x81,brightnessVal>>1]), bytearray([0x81,brightnessVal])]
 
-        # On micropython v1.18, it's important to avoid using regular variables for thread sychronisation.
-        # instead, elements of an array/bytearray should be used. We're using a uint32 array here, as that
-        # should hopefully further ensure the atomicity of any element accesses.
+        # On micropython v1.18, it's important to avoid using regular variables
+        # for thread sychronisation. instead, elements of an array/bytearray
+        # should be used. We're using a uint32 array here, as that should
+        # hopefully further ensure the atomicity of any element accesses.
         self._state = array('I', [0,0,0,0xff])
 
         self.pending_cmds = None
@@ -1052,4 +1064,3 @@ class Grayscale:
     @micropython.native
     def drawSpriteWithMask(self, s, m):
         self.blit(s.bitmap1, s.bitmap2, s.x, s.y, s.width, s.height, s.key, s.mirrorX, s.mirrorY, m.bitmap1)
-
