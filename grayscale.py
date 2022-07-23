@@ -222,6 +222,8 @@ class Grayscale:
         self.init_display()
         self.state = Grayscale_ThreadState_Starting
         _thread.start_new_thread(self._display_thread, ())
+
+        # Wait for the thread to successfully settle into a running state
         while self._state[Grayscale_StateIndex_State] != Grayscale_ThreadState_Running:
             if self._state[Grayscale_StateIndex_State] == Grayscale_ThreadState_Exception:
                 break
