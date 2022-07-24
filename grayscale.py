@@ -7,36 +7,18 @@ import gc
 from array import array
 from thumby import buttonA, buttonB, buttonU, buttonD, buttonL, buttonR
 
-def check_upython_version(major, minor, release):
-    up_ver = [int(s) for s in os.uname().release.split('.')]
-    if up_ver[0] > major:
-        return True
-    if up_ver[0] == major:
-        if up_ver[1] > minor:
-            return True
-        if up_ver[1] == minor:
-            if up_ver[2] >= release:
-                return True
-    return False
-
-is_v1_19_1_plus = check_upython_version(1, 19, 1)
 
 # When the Thumby boots up, it runs at 48MHz. main.py will switch this to 125MHz
 # before starting a game, but anything run in the code editor will be running at
 # the slower frequency.
-# We require a bit more grunt to run the GPU loop fast enough, and even more if
-# we're on 1.18 still and need to keep calling gc.collect().
+# We require a bit more grunt to run the GPU loop fast enough.
 # We'll assume that if this code has been imported, then the greyscale display
 # code is going to be used and go ahead and change the frequency now. The
 # alternative is to wait until object creation time, but prior to that other
 # objects could have been instantiated that rely on knowing what the runtime CPU
 # frequency will be.
-if is_v1_19_1_plus:
-    if freq() < 125000000:
-        freq(125000000)
-else:
-    if freq() < 196000000:
-        freq(196000000)
+if freq() < 198000000:
+    freq(198000000)
 
 
 class Sprite:
@@ -99,11 +81,13 @@ class Sprite:
 # You can't use const() to define class properties, so we'll defined them here
 
 # The times below are calculated using phase 1 and phase 2 pre-charge periods of
-# 1 clock. Note that although the SSD1306 datasheet doesn't state it, the 50
+# 1 clock.
+# Note that although the SSD1306 datasheet doesn't state it, the 50
 # clocks period per row _is_ a constant (datasheets for similar controllers from
-# the same manufacturer state this). 530kHz is taken to be the highest nominal
-# clock frequency. The calculations shown provide the value in seconds, which
-# can be multiplied by 1e6 to provide a microsecond value.
+# the same manufacturer state this).
+# 530kHz is taken to be the highest nominal clock frequency. The calculations
+# shown provide the value in seconds, which can be multiplied by 1e6 to provide
+# a microsecond value.
 Grayscale_pre_frame_time_us    = const( 785)     # 8 rows: ( 8*(1+1+50)) / 530e3 seconds
 Grayscale_frame_time_us        = const(4709)     # 48 rows: (49*(1+1+50)) / 530e3 seconds
 
@@ -160,47 +144,51 @@ class Grayscale:
         # desired result is achieved anyway. To simplify things, the following
         # comments are written as if the assumptions _are_ correct.
 
-        # We will keep the display sychronised by resetting the row counter
-        # before each frame and then outputting a frame of 58 rows. This is 18
+        # We will keep the display synchronised by resetting the row counter
+        # before each frame and then outputting a frame of 57 rows. This is 17
         # rows past the 40 of the actual display.
 
         # Prior to loading in the frame we park the row counter at row 0 and
-        # wait for the nominal time for 9 rows to be output. This (hopefully)
+        # wait for the nominal time for 8 rows to be output. This (hopefully)
         # provides enough time for the row counter to reach row 0 before it
         # sticks there. (Note: recent test indicate that perhaps the current row
-        # actually jumps before parking) The 'parking' is done by setting the
-        # number of rows (aka 'multiplex ratio') to 1 row. This is an invalid
-        # setting according to the datasheet but seems to still have the desired
-        # effect.
+        # actually jumps before parking)
+        # The 'parking' is done by setting the number of rows (aka 'multiplex
+        # ratio') to 1 row. This is an invalid setting according to the datasheet
+        # but seems to still have the desired effect.
+        # 0xa8,0    Set multiplex ratio to 1
+        # 0xd3,52   Set display offset to 52
         self.pre_frame_cmds = bytearray([0xa8,0, 0xd3,52])
         # Once the frame has been loaded into the display controller's GDRAM, we
-        # set the controller to output 58 rows, and then delay for the nominal
-        # time for 49 rows to be output. Considering the 18 row 'buffer space'
-        # after the real 40 rows, that puts us halfway between the end of the
-        # display, and the row at which it would wrap around. By having 9 rows
-        # either side of the nominal timing, we can absorb any variation in the
-        # frequency of the display controller's RC oscillator as well as any
-        # timing offsets introduced by the Python code.
-        self.post_frame_cmds = bytearray([0xd3,40+(64-58), 0xa8,58-1])
+        # set the controller to output 57 rows, and then delay for the nominal
+        # time for 48 rows to be output.
+        # Considering the 17 row 'buffer space' after the real 40 rows, that puts
+        # us around halfway between the end of the display, and the row at which
+        # it would wrap around.
+        # By having 8.5 rows either side of the nominal timing, we can absorb any
+        # variation in the frequency of the display controller's RC oscillator as
+        # well as any timing offsets introduced by the Python code.
+        # 0xd3,x    Set display offset. Since rows are scanned in reverse, the
+        #           calculation must work backwards from the last controller row.
+        # 0xa8,57-1 Set multiplex ratio to 57
+        self.post_frame_cmds = bytearray([0xd3,40+(64-57), 0xa8,57-1])
 
-        # We enhance the greys by modulating the contrast
-        if False:
-            # brightest
-            self.post_frame_adj = [bytearray([0x81,0x5]), bytearray([0x81,0x7f]), bytearray([0x81,0xff])]
-        else:
-            # use setting from thumby.cfg
-            brightnessSetting=2
-            try:
-                with open("thumby.cfg", "r") as fh:
-                    conf = fh.read().split(',')
-                for k in range(len(conf)):
-                    if(conf[k] == "brightness"):
-                        brightnessSetting = int(conf[k+1])
-            except OSError:
-                pass
-            brightnessVals = [0,28,127]
-            brightnessVal = brightnessVals[brightnessSetting]
-            self.post_frame_adj = [bytearray([0x81,brightnessVal>>4]), bytearray([0x81,brightnessVal>>1]), bytearray([0x81,brightnessVal])]
+        # We enhance the greys by modulating the contrast.
+        # Use setting from thumby.cfg
+        brightnessSetting=2
+        try:
+            with open("thumby.cfg", "r") as fh:
+                conf = fh.read().split(',')
+            for k in range(len(conf)):
+                if(conf[k] == "brightness"):
+                    brightnessSetting = int(conf[k+1])
+        except OSError:
+            pass
+        # but with a set of contrast values spanning the entire range provided by the controller
+        brightnessVals = [0,56,255]
+        brightnessVal = brightnessVals[brightnessSetting]
+        # 0x81,<val>        Set Bank0 contrast value to <val>
+        self.post_frame_adj = [bytearray([0x81,brightnessVal>>4]), bytearray([0x81,brightnessVal>>1]), bytearray([0x81,brightnessVal])]
 
         # On micropython v1.18, it's important to avoid using regular variables
         # for thread sychronisation. instead, elements of an array/bytearray
@@ -256,8 +244,26 @@ class Grayscale:
         self.cs(0)
         self.dc(0)
         # initialise as usual, except with shortest pre-charge periods and highest clock frequency
+        # 0xae          Display Off
+        # 0x20,0x00     Set horizontal addressing mode
+        # 0x40          Set display start line to 0
+        # 0xa1          Set segment remap mode 1
+        # 0xa8,63       Set multiplex ratio to 64 (will be changed later)
+        # 0xc8          Set COM output scan direction 1
+        # 0xd3,54       Set display offset to 0 (will be changed later)
+        # 0xda,0x12     Set COM pins hardware configuration: alternative config,
+        #               disable left/right remap
+        # 0xd5,0xf0     Set clk div ratio = 1, and osc freq = ~370kHz
+        # 0xd9,0x11     Set pre-charge periods: phase 1 = 1 , phase 2 = 1
+        # 0xdb,0x20     Set Vcomh deselect level = 0.77 x Vcc
+        # 0x81,0x7f     Set Bank0 contrast to 127 (will be changed later)
+        # 0xa4          Do not enable entire display (i.e. use GDRAM)
+        # 0xa6          Normal (not inverse) display
+        # 0x8d,0x14     Charge bump setting: enable charge pump during display on
+        # 0xad,0x30     Select internal 30uA Iref (max Iseg=240uA) during display on
+        # 0xf           Set display on
         self.spi.write(bytearray([
-            0xae, 0x20,0x00, 0x40, 0xa1, 0xa8,63, 0xc8, 0xd3,54, 0xda,0x12, 0xd5,0xf0, 0xd9,0x11, 0xdb,0x20, 0x81,0x7f,
+            0xae, 0x20,0x00, 0x40, 0xa1, 0xa8,63, 0xc8, 0xd3,0, 0xda,0x12, 0xd5,0xf0, 0xd9,0x11, 0xdb,0x20, 0x81,0x7f,
             0xa4, 0xa6, 0x8d,0x14, 0xad,0x30, 0xaf]))
         self.dc(1)
         # clear the entire GDRAM
@@ -266,6 +272,8 @@ class Grayscale:
             self.spi.write(zero32)
         self.dc(0)
         # set the GDRAM window
+        # 0x21,28,99    Set column start (28) and end (99) addresses
+        # 0x22,0,4      Set page start (0) and end (4) addresses0
         self.spi.write(bytearray([0x21,28,99, 0x22,0,4]))
 
 
@@ -279,7 +287,7 @@ class Grayscale:
         self.reset()
         self.cs(0)
         self.dc(0)
-        # reinitialise to the normal configuration
+        # reinitialise to the normal configuration. Copied from ssd1306.py
         self.spi.write(bytearray([
             0xae, 0x20,0x00, 0x40, 0xa1, 0xa8,self.height-1, 0xc8, 0xd3,0, 0xda,0x12, 0xd5,0x80,
             0xd9,0xf1, 0xdb,0x20, 0x81,0x7f,
@@ -288,6 +296,7 @@ class Grayscale:
         self.cs(1)
 
 
+    # Only call resume() if pause() returns True
     def pause(self):
         if self.error:
             return False
@@ -350,7 +359,7 @@ class Grayscale:
         if self.frameRate > 0:
             frameTimeMs = self.frameTimeMs
             lastUpdateEnd = self.lastUpdateEnd
-            frameTimeRemaining = frameTimeMs - utime.ticks_diff(utime.ticks_ms(), self.lastUpdateEnd)
+            frameTimeRemaining = frameTimeMs - utime.ticks_diff(utime.ticks_ms(), lastUpdateEnd)
             while frameTimeRemaining > 1:
                 buttonA.update()
                 buttonB.update()
@@ -359,9 +368,9 @@ class Grayscale:
                 buttonL.update()
                 buttonR.update()
                 utime.sleep_ms(1)
-                frameTimeRemaining = frameTimeMs - utime.ticks_diff(utime.ticks_ms(), self.lastUpdateEnd)
+                frameTimeRemaining = frameTimeMs - utime.ticks_diff(utime.ticks_ms(), lastUpdateEnd)
             while frameTimeRemaining > 0:
-                frameTimeRemaining = frameTimeMs - utime.ticks_diff(utime.ticks_ms(), self.lastUpdateEnd)
+                frameTimeRemaining = frameTimeMs - utime.ticks_diff(utime.ticks_ms(), lastUpdateEnd)
         self.lastUpdateEnd = utime.ticks_ms()
 
 
@@ -373,8 +382,10 @@ class Grayscale:
         self._state[Grayscale_StateIndex_ContrastChng] = c
 
     def brightness_sync(self, c):
-        if c >= 128:
-            return
+        if c < 0:
+            c = 0
+        elif c > 127:
+            c = 127
         self._state[Grayscale_StateIndex_ContrastChng] = c
         if self._state[Grayscale_StateIndex_State] != Grayscale_ThreadState_Running:
             return
@@ -397,76 +408,38 @@ class Grayscale:
         self._state[Grayscale_StateIndex_CopyBuffs] = 0
 
 
-    if is_v1_19_1_plus:
-
-        # without gc.collect()
-        @micropython.native
-        def _display_thread_frame(self, fn:int, post_frame_adj:ptr8, fb:ptr8):
-            t0:int = utime.ticks_us()
-            spi_write = self.spi.write
-            dc = self.dc
-            dc(0)
-            spi_write(self.pre_frame_cmds)
-            dc(1)
-            spi_write(fb)
-            dc(0)
-            spi_write(post_frame_adj)
-            utime.sleep_us(int(Grayscale_pre_frame_time_us) - int(utime.ticks_diff(utime.ticks_us(), t0)) - 12)
-            t0:int = utime.ticks_us()
-            spi_write(self.post_frame_cmds)
-            spi_write(post_frame_adj)
-            state:ptr32 = self._state
-            if (fn == 2) and (_state[Grayscale_StateIndex_CopyBuffs] != 0):
-                self._copy_buffers()
-            elif state[Grayscale_StateIndex_ContrastChng] != 0xff:
-                contrast:int = state[Grayscale_StateIndex_ContrastChng]
-                state[Grayscale_StateIndex_ContrastChng] = 0xff
-                pfa = self.post_frame_adj
-                pfa[0][1] = contrast>>4
-                pfa[1][1] = contrast>>1
-                pfa[2][1] = contrast
-            elif state[Grayscale_StateIndex_PendingCmd]:
-                spi_write(self.pending_cmds)
-                state[Grayscale_StateIndex_PendingCmd] = 0
-            utime.sleep_ms((int(Grayscale_frame_time_us) - int(utime.ticks_diff(utime.ticks_us(), t0))) >> 10)
-            utime.sleep_us(int(Grayscale_frame_time_us) - int(utime.ticks_diff(utime.ticks_us(), t0)) - 12)
-
-    else:
-
-        # with gc.collect()
-        @micropython.native
-        def _display_thread_frame(self, fn:int, post_frame_adj:ptr8, fb:ptr8):
-            t0:int = utime.ticks_us()
-            spi_write = self.spi.write
-            dc = self.dc
-            dc(0)
-            spi_write(self.pre_frame_cmds)
-            dc(1)
-            spi_write(fb)
-            dc(0)
-            spi_write(post_frame_adj)
-            utime.sleep_us(int(Grayscale_pre_frame_time_us) - int(utime.ticks_diff(utime.ticks_us(), t0)) - 12)
-            t0:int = utime.ticks_us()
-            spi_write(self.post_frame_cmds)
-            spi_write(post_frame_adj)
-            state:ptr32 = self._state
-            if (fn == 2) and (state[Grayscale_StateIndex_CopyBuffs] != 0):
-                self._copy_buffers()
-            elif (fn == 2) and (state[Grayscale_StateIndex_ContrastChng] != 0xff):
-                contrast:int = state[Grayscale_StateIndex_ContrastChng]
-                state[Grayscale_StateIndex_ContrastChng] = 0xff
-                pfa = self.post_frame_adj
-                pfa[0][1] = contrast>>4
-                pfa[1][1] = contrast>>1
-                pfa[2][1] = contrast
-            elif state[Grayscale_StateIndex_PendingCmd]:
-                spi_write(self.pending_cmds)
-                state[Grayscale_StateIndex_PendingCmd] = 0
-            else:
-                gc.collect()
-            utime.sleep_ms((int(Grayscale_frame_time_us) - int(utime.ticks_diff(utime.ticks_us(), t0))) >> 10)
-            utime.sleep_us(int(Grayscale_frame_time_us) - int(utime.ticks_diff(utime.ticks_us(), t0)) - 12)
-
+    @micropython.native
+    def _display_thread_frame(self, fn:int, post_frame_adj:ptr8, fb:ptr8):
+        t0:int = utime.ticks_us()
+        spi_write = self.spi.write
+        dc = self.dc
+        dc(0)
+        spi_write(self.pre_frame_cmds)
+        dc(1)
+        spi_write(fb)
+        dc(0)
+        spi_write(post_frame_adj)
+        utime.sleep_us(int(Grayscale_pre_frame_time_us) - int(utime.ticks_diff(utime.ticks_us(), t0)))
+        t0:int = utime.ticks_us()
+        spi_write(self.post_frame_cmds)
+        spi_write(post_frame_adj)
+        state:ptr32 = self._state
+        if (fn == 2) and (state[Grayscale_StateIndex_CopyBuffs] != 0):
+            self._copy_buffers()
+        elif (fn == 2) and (state[Grayscale_StateIndex_ContrastChng] != 0xff):
+            contrast:int = state[Grayscale_StateIndex_ContrastChng]
+            state[Grayscale_StateIndex_ContrastChng] = 0xff
+            pfa = self.post_frame_adj
+            pfa[0][1] = contrast >> 4
+            pfa[1][1] = contrast
+            pfa[2][1] = (contrast << 1) + 1
+        elif state[Grayscale_StateIndex_PendingCmd]:
+            spi_write(self.pending_cmds)
+            state[Grayscale_StateIndex_PendingCmd] = 0
+        else:
+            gc.collect()
+        utime.sleep_ms((int(Grayscale_frame_time_us) - int(utime.ticks_diff(utime.ticks_us(), t0))) >> 10)
+        utime.sleep_us(int(Grayscale_frame_time_us) - int(utime.ticks_diff(utime.ticks_us(), t0)))
 
     # GPU (Greyscale Processing Unit) thread function
     @micropython.native
@@ -737,6 +710,15 @@ class Grayscale:
 
     @micropython.viper
     def drawLine(self, x0:int, y0:int, x1:int, y1:int, colour:int):
+        if x0 == x1:
+            if y0 == y1:
+                self.setPixel(x0, y0, colour)
+            else:
+                self.drawHLine(x0, y0, x1-x0, colour)
+            return
+        if y0 == y1:
+            self.drawVLine(x0, y0, y1-y0, colour)
+            return
         dx:int = x1 - x0
         dy:int = y1 - y0
         sx:int = 1
