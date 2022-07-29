@@ -5,20 +5,38 @@ import _thread
 import os
 import gc
 from array import array
-from thumby import buttonA, buttonB, buttonU, buttonD, buttonL, buttonR
+try:
+    from thumbyButton import buttonA, buttonB, buttonU, buttonD, buttonL, buttonR
+except:
+    # this will fail on Thumbys that have not been updated, but that's ok as we
+    # won't run anyway.
+    pass
 
 
 # When the Thumby boots up, it runs at 48MHz. main.py will switch this to 125MHz
 # before starting a game, but anything run in the code editor will be running at
-# the slower frequency.
-# We require a bit more grunt to run the GPU loop fast enough.
+# the slower frequency. We want a bit of grunt for the GPU loop so we'll raise it
+# to at least 125MHz here.
 # We'll assume that if this code has been imported, then the greyscale display
 # code is going to be used and go ahead and change the frequency now. The
 # alternative is to wait until object creation time, but prior to that other
 # objects could have been instantiated that rely on knowing what the runtime CPU
 # frequency will be.
-if freq() < 198000000:
-    freq(198000000)
+if freq() < 125000000:
+    freq(125000000)
+
+
+def check_upython_version(major, minor, release):
+    up_ver = [int(s) for s in os.uname().release.split('.')]
+    if up_ver[0] > major:
+        return True
+    if up_ver[0] == major:
+        if up_ver[1] > minor:
+            return True
+        if up_ver[1] == minor:
+            if up_ver[2] >= release:
+                return True
+    return False
 
 
 class Sprite:
@@ -78,7 +96,7 @@ class Sprite:
                 self.bitmap2 = memoryview(self.bitmapSource2)[offset:offset+self.bitmapByteCount]
 
 
-# You can't use const() to define class properties, so we'll defined them here
+# You can't use const() to define class properties, so we'll define them here
 
 # The times below are calculated using phase 1 and phase 2 pre-charge periods of
 # 1 clock.
@@ -89,16 +107,12 @@ class Sprite:
 # shown provide the value in seconds, which can be multiplied by 1e6 to provide
 # a microsecond value.
 Grayscale_pre_frame_time_us    = const( 785)     # 8 rows: ( 8*(1+1+50)) / 530e3 seconds
-Grayscale_frame_time_us        = const(4709)     # 48 rows: (49*(1+1+50)) / 530e3 seconds
+Grayscale_frame_time_us        = const(4611)     # 47 rows: (49*(1+1+50)) / 530e3 seconds
 
 Grayscale_ThreadState_Starting   = const(0)
 Grayscale_ThreadState_Stopped    = const(1)
 Grayscale_ThreadState_Running    = const(2)
 Grayscale_ThreadState_Stopping   = const(3)
-Grayscale_ThreadState_Pausing    = const(4)
-Grayscale_ThreadState_Paused     = const(5)
-Grayscale_ThreadState_Resuming   = const(6)
-Grayscale_ThreadState_Exception  = const(7)
 
 Grayscale_StateIndex_State       = const(0)
 Grayscale_StateIndex_CopyBuffs   = const(1)
@@ -114,13 +128,16 @@ class Grayscale:
     WHITE     = 3
 
     def __init__(self):
+        if not check_upython_version(1, 19, 1):
+            raise NotImplementedError('Greyscale support requires at least Micropython v1.19.1. Please update via the Thumby code editor')
+
         self.spi = SPI(0, sck=Pin(18), mosi=Pin(19))
         self.dc = Pin(17)
         self.cs = Pin(16)
         self.res = Pin(20)
 
         self.spi.init(baudrate=100 * 1000 * 1000, polarity=0, phase=0)
-        self.res.init(Pin.OUT, value=0)
+        self.res.init(Pin.OUT, value=1)
         self.dc.init(Pin.OUT, value=0)
         self.cs.init(Pin.OUT, value=1)
 
@@ -185,18 +202,18 @@ class Grayscale:
         except OSError:
             pass
         # but with a set of contrast values spanning the entire range provided by the controller
-        brightnessVals = [0,56,255]
+        brightnessVals = [0,112,255]
         brightnessVal = brightnessVals[brightnessSetting]
         # 0x81,<val>        Set Bank0 contrast value to <val>
-        self.post_frame_adj = [bytearray([0x81,brightnessVal>>4]), bytearray([0x81,brightnessVal>>1]), bytearray([0x81,brightnessVal])]
+        self.post_frame_adj = [bytearray([0x81,brightnessVal>>6]), bytearray([0x81,brightnessVal>>1]), bytearray([0x81,brightnessVal])]
 
-        # On micropython v1.18, it's important to avoid using regular variables
-        # for thread sychronisation. instead, elements of an array/bytearray
-        # should be used. We're using a uint32 array here, as that should
-        # hopefully further ensure the atomicity of any element accesses.
+        # It's better to avoid using regular variables for thread sychronisation.
+        # Instead, elements of an array/bytearray should be used.
+        # We're using a uint32 array here, as that should hopefully further ensure
+        # the atomicity of any element accesses.
         self._state = array('I', [0,0,0,0xff])
 
-        self.pending_cmds = None
+        self.pending_cmds = bytearray([0] * 8)
 
         self.setFont('lib/font5x7.bin', 5, 7, 1)
         #self.setFont('lib/font8x8.bin', 8, 8, 0)
@@ -208,19 +225,14 @@ class Grayscale:
         self.fill(Grayscale.BLACK)
         self._copy_buffers()
         self.init_display()
+        gc.collect()
         self.state = Grayscale_ThreadState_Starting
+        _thread.stack_size(2048)        # minimum stack size for RP2040 micropython port
         _thread.start_new_thread(self._display_thread, ())
 
         # Wait for the thread to successfully settle into a running state
         while self._state[Grayscale_StateIndex_State] != Grayscale_ThreadState_Running:
-            if self._state[Grayscale_StateIndex_State] == Grayscale_ThreadState_Exception:
-                break
             idle()
-
-
-    @property
-    def error(self):
-        return self._state[Grayscale_StateIndex_State] == Grayscale_ThreadState_Exception
 
 
     # allow use of 'with'
@@ -278,7 +290,6 @@ class Grayscale:
 
 
     def stop(self):
-        self.resume()
         if self._state[Grayscale_StateIndex_State] == Grayscale_ThreadState_Running:
             self._state[Grayscale_StateIndex_State] = Grayscale_ThreadState_Stopping
             while self._state[Grayscale_StateIndex_State] != Grayscale_ThreadState_Stopped:
@@ -295,36 +306,30 @@ class Grayscale:
             0x21,28,99, 0x22,0,4]))
         self.cs(1)
 
-
-    # Only call resume() if pause() returns True
-    def pause(self):
-        if self.error:
-            return False
-        if self._state[Grayscale_StateIndex_State] == Grayscale_ThreadState_Paused:
-            return False
-        self._state[Grayscale_StateIndex_State] = Grayscale_ThreadState_Pausing
-        while self._state[Grayscale_StateIndex_State] != Grayscale_ThreadState_Paused:
-            idle()
-        return True
-
-    def resume(self):
-        if self._state[Grayscale_StateIndex_State] != Grayscale_ThreadState_Paused:
-            return
-        self._state[Grayscale_StateIndex_State] = Grayscale_ThreadState_Resuming
-        while self._state[Grayscale_StateIndex_State] != Grayscale_ThreadState_Running:
-            idle()
-
+    @micropython.native
     def write_cmd(self, cmd):
         if cmd is list:
             cmd = bytearray(cmd)
         elif not cmd is bytearray:
             cmd = bytearray([cmd])
         if self._state[Grayscale_StateIndex_State] == Grayscale_ThreadState_Running:
-            self.pending_cmds = cmd
+            pending_cmds = self.pending_cmds
+            if len(cmd) > len(pending_cmds):
+                # We can't just break up the longer list of commands automatically, as we
+                # might end up separating a command and its parameter(s).
+                raise ValueError('Cannot send more than %u bytes using write_cmd()' % len(pending_cmds))
+            i = 0
+            while i < len(cmd):
+                pending_cmds[i] = cmd[i]
+                i += 1
+            # Fill the rest of the bytearray with display controller NOPs
+            # This is probably better than having to create slice or a memoryview in the GPU thread
+            while i < len(pending_cmds):
+                pending_cmds[i] = 0x3e
+                i += 1
             self._state[Grayscale_StateIndex_PendingCmd] = 1
             while self._state[Grayscale_StateIndex_PendingCmd]:
                 idle()
-            self.pending_cmds = None
         else:
             self.dc(0)
             self.spi.write(cmd)
@@ -334,12 +339,13 @@ class Grayscale:
     def poweron(self):
         self.write_cmd(0xaf)
 
-    @micropython.native
+    @micropython.viper
     def show(self):
-        self._state[Grayscale_StateIndex_CopyBuffs] = 1
-        if self._state[Grayscale_StateIndex_State] != Grayscale_ThreadState_Running:
+        state:ptr32 = ptr32(self._state)
+        state[Grayscale_StateIndex_CopyBuffs] = 1
+        if state[Grayscale_StateIndex_State] != Grayscale_ThreadState_Running:
             return
-        while self._state[Grayscale_StateIndex_CopyBuffs] != 0:
+        while state[Grayscale_StateIndex_CopyBuffs] != 0:
             idle()
 
     @micropython.native
@@ -392,15 +398,14 @@ class Grayscale:
         while self._state[Grayscale_StateIndex_ContrastChng] != 0xff:
             idle()
 
-    @micropython.native
+    @micropython.viper
     def _copy_buffers(self):
-        b1 = self.buffer1 ; b2 = self.buffer2
-        _b1 = self._buffer1 ; _b2 = self._buffer2 ; _b3 = self._buffer3
+        b1:ptr32 = ptr32(self.buffer1) ; b2:ptr32 = ptr32(self.buffer2)
+        _b1:ptr32 = ptr32(self._buffer1) ; _b2:ptr32 = ptr32(self._buffer2) ; _b3:ptr32 = ptr32(self._buffer3)
         i:int = 0
-        bs:int = self.buffer_size
-        while i < bs:
-            v1 = b1[i]
-            v2 = b2[i]
+        while i < 90:
+            v1:int = b1[i]
+            v2:int = b2[i]
             _b1[i] = v1 | v2
             _b2[i] = v2
             _b3[i] = v1 & v2
@@ -408,81 +413,73 @@ class Grayscale:
         self._state[Grayscale_StateIndex_CopyBuffs] = 0
 
 
-    @micropython.native
-    def _display_thread_frame(self, fn:int, post_frame_adj:ptr8, fb:ptr8):
-        t0:int = utime.ticks_us()
+    @micropython.viper
+    def _display_thread(self):
+        buffers = array('O', [self._buffer1, self._buffer2, self._buffer3])
+        post_frame_adj = array('O', [self.post_frame_adj[0], self.post_frame_adj[1], self.post_frame_adj[2]])
+        state:ptr32 = ptr32(self._state)
         spi_write = self.spi.write
         dc = self.dc
-        dc(0)
-        spi_write(self.pre_frame_cmds)
-        dc(1)
-        spi_write(fb)
-        dc(0)
-        spi_write(post_frame_adj)
-        utime.sleep_us(int(Grayscale_pre_frame_time_us) - int(utime.ticks_diff(utime.ticks_us(), t0)))
-        t0:int = utime.ticks_us()
-        spi_write(self.post_frame_cmds)
-        spi_write(post_frame_adj)
-        state:ptr32 = self._state
-        if (fn == 2) and (state[Grayscale_StateIndex_CopyBuffs] != 0):
-            self._copy_buffers()
-        elif (fn == 2) and (state[Grayscale_StateIndex_ContrastChng] != 0xff):
-            contrast:int = state[Grayscale_StateIndex_ContrastChng]
-            state[Grayscale_StateIndex_ContrastChng] = 0xff
-            pfa = self.post_frame_adj
-            pfa[0][1] = contrast >> 4
-            pfa[1][1] = contrast
-            pfa[2][1] = (contrast << 1) + 1
-        elif state[Grayscale_StateIndex_PendingCmd]:
-            spi_write(self.pending_cmds)
-            state[Grayscale_StateIndex_PendingCmd] = 0
-        else:
-            gc.collect()
-        utime.sleep_ms((int(Grayscale_frame_time_us) - int(utime.ticks_diff(utime.ticks_us(), t0))) >> 10)
-        utime.sleep_us(int(Grayscale_frame_time_us) - int(utime.ticks_diff(utime.ticks_us(), t0)))
+        pre_frame_cmds:ptr = self.pre_frame_cmds
+        post_frame_cmds:ptr = self.post_frame_cmds
+        ticks_us = utime.ticks_us
+        ticks_diff = utime.ticks_diff
+        sleep_ms = utime.sleep_ms
+        sleep_us = utime.sleep_us
 
-    # GPU (Greyscale Processing Unit) thread function
-    @micropython.native
-    def _display_thread(self):
-        import utime        # sometimes utime global gets lost for this thread, so we reimport it here
-        buffer1 = self._buffer1
-        buffer2 = self._buffer2
-        buffer3 = self._buffer3
-        post_frame_adj1 = self.post_frame_adj[0]
-        post_frame_adj2 = self.post_frame_adj[1]
-        post_frame_adj3 = self.post_frame_adj[2]
-        state = self._state
-        display_thread_frame = self._display_thread_frame
+        b1:ptr32 = ptr32(self.buffer1) ; b2:ptr32 = ptr32(self.buffer2)
+        _b1:ptr32 = ptr32(self._buffer1) ; _b2:ptr32 = ptr32(self._buffer2) ; _b3:ptr32 = ptr32(self._buffer3)
+
+        fn:int ; i:int ; t0:int
+        v1:int ; v2:int ; contrast:int
+
         state[Grayscale_StateIndex_State] = Grayscale_ThreadState_Running
-        try:
-            while True:
-                while state[Grayscale_StateIndex_State] == Grayscale_ThreadState_Running:
-                    display_thread_frame(0, post_frame_adj1, buffer1)
-                    display_thread_frame(1, post_frame_adj2, buffer2)
-                    display_thread_frame(2, post_frame_adj3, buffer3)
-                if state[Grayscale_StateIndex_State] == Grayscale_ThreadState_Stopping:
-                    self._teardown_clear_render_buffer1()
-                    self.dc(1)
-                    self.spi.write(self._buffer1)
-                    state[Grayscale_StateIndex_State] = Grayscale_ThreadState_Stopped
-                    return
-                if state[Grayscale_StateIndex_State] == Grayscale_ThreadState_Pausing:
-                    state[Grayscale_StateIndex_State] = Grayscale_ThreadState_Paused
-                    while state[Grayscale_StateIndex_State] != Grayscale_ThreadState_Resuming:
-                        idle()
-                    state[Grayscale_StateIndex_State] = Grayscale_ThreadState_Running
-        except Exception as e:
-            self._state[Grayscale_StateIndex_State] = Grayscale_ThreadState_Exception
-            print(e)
-
-
-    @micropython.viper
-    def _teardown_clear_render_buffer1(self):
-        b1:ptr32 = ptr32(self._buffer1)
-        i:int = 0
-        while i < 90:
-            b1[i] = 0
-            i += 1
+        while True:
+            while state[Grayscale_StateIndex_State] == Grayscale_ThreadState_Running:
+                fn = 0
+                while fn < 3:
+                    t0 = ticks_us()
+                    dc(0)
+                    spi_write(pre_frame_cmds)
+                    dc(1)
+                    spi_write(buffers[fn])
+                    dc(0)
+                    spi_write(post_frame_adj[fn])
+                    sleep_us(Grayscale_pre_frame_time_us - int(ticks_diff(ticks_us(), t0)))
+                    t0 = ticks_us()
+                    spi_write(post_frame_cmds)
+                    spi_write(post_frame_adj[fn])
+                    if (fn == 2) and (state[Grayscale_StateIndex_CopyBuffs] != 0):
+                        i = 0
+                        while i < 90:
+                            v1 = b1[i]
+                            v2 = b2[i]
+                            _b1[i] = v1 | v2
+                            _b2[i] = v2
+                            _b3[i] = v1 & v2
+                            i += 1
+                        state[Grayscale_StateIndex_CopyBuffs] = 0
+                    elif (fn == 2) and (state[Grayscale_StateIndex_ContrastChng] != 0xffff):
+                        contrast = state[Grayscale_StateIndex_ContrastChng]
+                        state[Grayscale_StateIndex_ContrastChng] = 0xffff
+                        post_frame_adj[0][1] = contrast >> 5
+                        post_frame_adj[1][1] = contrast >> 1
+                        post_frame_adj[2][1] = (contrast << 1) + 1
+                    elif state[Grayscale_StateIndex_PendingCmd]:
+                        spi_write(pending_cmds)
+                        state[Grayscale_StateIndex_PendingCmd] = 0
+                    sleep_ms((Grayscale_frame_time_us - int(ticks_diff(ticks_us(), t0))) >> 10)
+                    sleep_us(Grayscale_frame_time_us - int(ticks_diff(ticks_us(), t0)))
+                    fn += 1
+            if state[Grayscale_StateIndex_State] == Grayscale_ThreadState_Stopping:
+                i = 0
+                while i < 90:
+                    _b1[i] = 0
+                    i += 1
+                dc(1)
+                spi_write(buffers[0])
+                state[Grayscale_StateIndex_State] = Grayscale_ThreadState_Stopped
+                return
 
 
     @micropython.viper
@@ -1008,18 +1005,12 @@ class Grayscale:
             dstco:int = dsto
             i:int = width
             while i != 0:
-                v1:int = 0
-                v2:int = 0
-                if src1[srcco] & srcm:
-                    v1 = 1
-                if src2[srcco] & srcm:
-                    v2 = 1
                 if (mask[srcco] & srcm) == 0:
-                    if v1:
+                    if src1[srcco] & srcm:
                         buffer1[dstco] |= dstm
                     else:
                         buffer1[dstco] &= dstim
-                    if v2:
+                    if src2[srcco] & srcm:
                         buffer2[dstco] |= dstm
                     else:
                         buffer2[dstco] &= dstim
