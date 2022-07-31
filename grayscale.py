@@ -107,7 +107,7 @@ class Sprite:
 # shown provide the value in seconds, which can be multiplied by 1e6 to provide
 # a microsecond value.
 Grayscale_pre_frame_time_us    = const( 785)     # 8 rows: ( 8*(1+1+50)) / 530e3 seconds
-Grayscale_frame_time_us        = const(4611)     # 47 rows: (49*(1+1+50)) / 530e3 seconds
+Grayscale_frame_time_us        = const(4709)     # 48 rows: (49*(1+1+50)) / 530e3 seconds
 
 Grayscale_ThreadState_Starting   = const(0)
 Grayscale_ThreadState_Stopped    = const(1)
