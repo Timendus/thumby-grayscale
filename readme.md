@@ -136,41 +136,6 @@ call `gs._joinBuffers()` after you are done manipulating though, so the colours
 are correct. See below at [On colours and the "third
 layer"](#on-colours-and-the-third-layer) for more background information.
 
-### Calibration
-
-You can let the user calibrate the timing with a little graphical interface by
-calling:
-
-```python
-grayscale.Calibration(gs).start()
-```
-
-![Calibration screen on the Thumby](./pictures/calibration_on_thumby.jpeg)
-<br/>_Showing the calibration screen_
-
-In this calibration screen, up and down change the grayscale timing in large
-increments, left and right in small increments, A or B confirms the new setting.
-The value shown on screen is the tens of microseconds that a full update cycle
-should take. So in the photo, the screen is cycled every 27,4 milliseconds (or
-36,5 frames per second), which is the default value. This value seems to give me
-pretty stable results.
-
-The timing values are loaded from a configuration file in the Thumby root
-(`grayscale.conf.json`) whenever a grayscale application starts. If you want to
-save the new configuration so it survives a restart / reboot, after using the
-calibration screen, you have to stop the grayscale thread, save the current
-configuration and restart the thread:
-
-```python
-gs.stop()
-gs.saveConfig()
-gs = grayscale.Grayscale()
-```
-
-_As mentioned above under [caveats](#caveats), you have to stop the grayscale
-thread every time you do anything touching the flash memory to prevent crashes,
-including saving the grayscale configuration._
-
 ### Stopping
 
 If your application exits back to the menu, or you want to switch back to black

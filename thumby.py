@@ -39,7 +39,7 @@ from glob import glob
 from textwrap import dedent
 from inspect import getsource
 from ampy import pyboard, files
-from sys import argv
+from sys import argv, platform
 
 def build(files):
     import mpy_cross
@@ -69,7 +69,12 @@ def startProgram(file):
 class Thumby:
     def _thumby(self):
         if not hasattr(self, 'thumby'):
-            devices = glob('/dev/tty.usbmodem*')
+            if platform == 'darwin':
+                devices = glob('/dev/tty.usbmodem*')
+            elif platform == 'linux' or platform == 'linux2':
+                devices = glob('/dev/ttyACM*')
+            else:
+                raise Exception(f"Don't know how to find Thumby on {platform}")
             port = devices and devices[0]
             if not port:
                 print('Could not find your Thumby! Is it plugged in and turned on..?')
