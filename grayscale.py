@@ -202,10 +202,10 @@ class Grayscale:
         except OSError:
             pass
         # but with a set of contrast values spanning the entire range provided by the controller
-        brightnessVals = [0,112,255]
+        brightnessVals = [0,56,127]
         brightnessVal = brightnessVals[brightnessSetting]
         # 0x81,<val>        Set Bank0 contrast value to <val>
-        self.post_frame_adj = [bytearray([0x81,brightnessVal>>6]), bytearray([0x81,brightnessVal>>1]), bytearray([0x81,brightnessVal])]
+        self.post_frame_adj = [bytearray([0x81,brightnessVal>>5]), bytearray([0x81,brightnessVal]), bytearray([0x81,(brightnessVal << 1) + 1])]
 
         # It's better to avoid using regular variables for thread sychronisation.
         # Instead, elements of an array/bytearray should be used.
@@ -225,7 +225,6 @@ class Grayscale:
         self.fill(Grayscale.BLACK)
         self._copy_buffers()
         self.init_display()
-        gc.collect()
         self.state = _Grayscale_ThreadState_Starting
         _thread.stack_size(2048)        # minimum stack size for RP2040 micropython port
         _thread.start_new_thread(self._display_thread, ())
@@ -413,10 +412,13 @@ class Grayscale:
         self._state[_Grayscale_StateIndex_CopyBuffs] = 0
 
 
+    # GPU (Gray Processing Unit) thread function
     @micropython.viper
     def _display_thread(self):
+        # local object arrays for display framebuffers and post-frame commands
         buffers = array('O', [self._buffer1, self._buffer2, self._buffer3])
         post_frame_adj = array('O', [self.post_frame_adj[0], self.post_frame_adj[1], self.post_frame_adj[2]])
+        # cache various instance variables, buffers, and functions/methods
         state:ptr32 = ptr32(self._state)
         spi_write = self.spi.write
         dc = self.dc
@@ -427,58 +429,96 @@ class Grayscale:
         sleep_ms = utime.sleep_ms
         sleep_us = utime.sleep_us
 
+        # we want ptr32 vars for fast buffer copying
         b1:ptr32 = ptr32(self.buffer1) ; b2:ptr32 = ptr32(self.buffer2)
         _b1:ptr32 = ptr32(self._buffer1) ; _b2:ptr32 = ptr32(self._buffer2) ; _b3:ptr32 = ptr32(self._buffer3)
 
+        # the viper compiler doesn't need variables predeclared with the type
+        # decoration like this, but I think it's a bit cleaner
         fn:int ; i:int ; t0:int
         v1:int ; v2:int ; contrast:int
 
         state[_Grayscale_StateIndex_State] = _Grayscale_ThreadState_Running
         while True:
             while state[_Grayscale_StateIndex_State] == _Grayscale_ThreadState_Running:
+                # this is the main GPU loop. We cycle through each of the 3 display
+                # framebuffers, sending the framebuffer data and various commands.
                 fn = 0
                 while fn < 3:
                     t0 = ticks_us()
+                    # the 'dc' output is used to switch the controller to receive
+                    # commands (0) or frame data (1)
                     dc(0)
+                    # send the pre-frame commands to 'park' the row counter
                     spi_write(pre_frame_cmds)
                     dc(1)
+                    # and then send the frame
                     spi_write(buffers[fn])
                     dc(0)
+                    # send the first instance of the contrast adjust command
                     spi_write(post_frame_adj[fn])
+                    # wait for the pre-frame time to complete
                     sleep_us(_Grayscale_pre_frame_time_us - int(ticks_diff(ticks_us(), t0)))
                     t0 = ticks_us()
+                    # now send the post-frame commands to display the frame
                     spi_write(post_frame_cmds)
+                    # and adjust the contrast for the specific frame number again.
+                    # If we do not do this twice, the screen can glitch.
                     spi_write(post_frame_adj[fn])
+                    # check if there's a pending frame copy required
+                    # we only copy the paint framebuffers to the display framebuffers on
+                    # the last frame to avoid screen-tearing artefacts
                     if (fn == 2) and (state[_Grayscale_StateIndex_CopyBuffs] != 0):
                         i = 0
+                        # fast copy loop. By using using ptr32 vars we copy 3 bytes at a time.
                         while i < 90:
                             v1 = b1[i]
                             v2 = b2[i]
+                            # this isn't a straight copy. Instead we are mapping:
+                            # in        out
+                            # 0 (0b00)  0 (0b000)
+                            # 1 (0b01)  1 (0b001)
+                            # 2 (0b10)  3 (0b011)
+                            # 3 (0b11)  7 (0b111)
                             _b1[i] = v1 | v2
                             _b2[i] = v2
                             _b3[i] = v1 & v2
                             i += 1
                         state[_Grayscale_StateIndex_CopyBuffs] = 0
+                    # check if there's a pending contrast/brightness value change
+                    # again, we only adjust this after the last frame in the cycle
                     elif (fn == 2) and (state[_Grayscale_StateIndex_ContrastChng] != 0xffff):
                         contrast = state[_Grayscale_StateIndex_ContrastChng]
                         state[_Grayscale_StateIndex_ContrastChng] = 0xffff
+                        # shift the value to provide 3 different levels
                         post_frame_adj[0][1] = contrast >> 5
                         post_frame_adj[1][1] = contrast >> 1
                         post_frame_adj[2][1] = (contrast << 1) + 1
+                    # check if there are pending commands
                     elif state[_Grayscale_StateIndex_PendingCmd]:
+                        # and send them
                         spi_write(pending_cmds)
                         state[_Grayscale_StateIndex_PendingCmd] = 0
+                    # two stage wait for frame time to complete
+                    # we use sleep_ms() first to allow idle loop usage, with >>10 for a fast
+                    # /1000 approximation
                     sleep_ms((_Grayscale_frame_time_us - int(ticks_diff(ticks_us(), t0))) >> 10)
+                    # and finish with a sleep_us() to spin for the correct duration
                     sleep_us(_Grayscale_frame_time_us - int(ticks_diff(ticks_us(), t0)))
                     fn += 1
+            # if the state has changed to 'stopping'
             if state[_Grayscale_StateIndex_State] == _Grayscale_ThreadState_Stopping:
                 i = 0
+                # blank out framebuffer 1
                 while i < 90:
                     _b1[i] = 0
                     i += 1
                 dc(1)
+                # and send it to clear the screen
                 spi_write(buffers[0])
+                # and mark that we've stopped
                 state[_Grayscale_StateIndex_State] = _Grayscale_ThreadState_Stopped
+                # the thread can now exit
                 return
 
 
