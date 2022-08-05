@@ -123,8 +123,8 @@ _Grayscale_StateIndex_ContrastChng= const(3)
 class Grayscale:
 
     BLACK     = 0
-    LIGHTGRAY = 1
-    DARKGRAY  = 2
+    DARKGRAY  = 1
+    LIGHTGRAY = 2
     WHITE     = 3
 
     def __init__(self):

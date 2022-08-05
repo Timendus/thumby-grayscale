@@ -99,8 +99,8 @@ bitmap. The colour of a pixel is defined by the values in both layers:
 | Layer 1 | Layer 2 | Colour                                           |
 |---------|---------|--------------------------------------------------|
 | 0       | 0       | ![#000000](./pictures/black.png) Black           |
-| 0       | 1       | ![#999999](./pictures/lightgray.png) Light gray  |
 | 1       | 0       | ![#666666](./pictures/darkgray.png) Dark gray    |
+| 0       | 1       | ![#999999](./pictures/lightgray.png) Light gray  |
 | 1       | 1       | ![#DDDDDD](./pictures/white.png) White           |
 
 The text, line drawing and filling functions can now be used with four colours
@@ -117,8 +117,8 @@ gs.update()
 | Constant       | Value | Colour                                           |
 | -------------- |-------|--------------------------------------------------|
 | `gs.BLACK`     | 0     | ![#000000](./pictures/black.png) Black           |
-| `gs.LIGHTGRAY` | 1     | ![#999999](./pictures/lightgray.png) Light gray  |
-| `gs.DARKGRAY`  | 2     | ![#666666](./pictures/darkgray.png) Dark gray    |
+| `gs.DARKGRAY`  | 1     | ![#666666](./pictures/darkgray.png) Dark gray    |
+| `gs.LIGHTGRAY` | 2     | ![#999999](./pictures/lightgray.png) Light gray  |
 | `gs.WHITE`     | 3     | ![#DDDDDD](./pictures/white.png) White           |
 
 ### Using the buffers directly
