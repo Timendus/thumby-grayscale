@@ -11,8 +11,7 @@ sys.path.insert(0, "/".join(__file__.split("/")[0:-1]))
 
 # Do imports
 import thumby
-from framebuf import FrameBuffer, MONO_VLSB
-from time import ticks_ms, sleep_us, sleep_ms
+from time import sleep_ms
 import grayscale
 
 # Initialization
