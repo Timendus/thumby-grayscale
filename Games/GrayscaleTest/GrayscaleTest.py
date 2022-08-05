@@ -1,73 +1,63 @@
 # Grayscale library demo
+# https://github.com/Timendus/thumby-grayscale
 #
-# Shows four different screens, then reboots. Cycle through the screens by
-# pressing A (rightmost button), go to calibration screen by pressing B (lefmost
-# button). When on calibration screen, up and down change the grayscale timing
-# in large increments, left and right in small increments, A or B confirms.
+# Shows six different screens, then reboots. Cycle through the screens by
+# pressing A or B.
 
 # Fix import path so it finds the grayscale library
 import sys
 sys.path.insert(0, "/".join(__file__.split("/")[0:-1]))
 
-# Do imports
-import thumby
+# Import dependencies
+from thumbyButton import actionPressed
+from machine import reset
 from time import sleep_ms
+from utime import ticks_us, sleep_us, ticks_diff
 import grayscale
 
 # Initialization
 
-thumby.audio.stop()
-thumby.display.setFPS(0)
 gs = grayscale.Grayscale()
 
-# Helper functions
+# Helper function
 
 def waitKey():
-    while thumby.actionPressed(): pass
-    while not thumby.actionPressed(): pass
-    while thumby.actionPressed(): pass
+    while actionPressed(): pass
+    while not actionPressed(): pass
+    while actionPressed(): pass
 
-# Drawing primitives demo
+# Directly writing to the buffers
 
-gs.fill(gs.BLACK)
-gs.drawFilledRectangle(16, 9, 40, 21, gs.WHITE)
-gs.drawText("Hello", 18, 11, gs.LIGHTGRAY)
-gs.drawText("world!", 18, 19, gs.DARKGRAY)
+for s in range(4):
+    if s & 1:
+        m1 = 0xff
+    else:
+        m1 = 0
+    if s & 2:
+        m2 = 0xff
+    else:
+        m2 = 0
+    sx = s * 18
+    for y in range(5):
+        sy = y * 72
+        for x in range(18):
+            gs.buffer1[sy + sx + x] = m1
+            gs.buffer2[sy + sx + x] = m2
+gs.show()
+waitKey()
+
+# Drawing primitives
+
+gs.drawFilledRectangle(0, 0, 72, 40, gs.WHITE)
+gs.drawFilledRectangle(0, 0, 62, 30, gs.LIGHTGRAY)
+gs.drawFilledRectangle(0, 0, 52, 20, gs.DARKGRAY)
+gs.drawFilledRectangle(0, 0, 42, 10, gs.BLACK)
+gs.drawText("Hello", 2, 31, gs.LIGHTGRAY)
+gs.drawText("world!", 37, 31, gs.DARKGRAY)
 gs.update()
 waitKey()
 
-# Bouncing cat demo
-
-cat = grayscale.Sprite(
-    12, 9,         # Dimensions
-    bytearray([    # Layer 2 data
-        255,255,87,7,3,3,3,67,3,7,7,255,
-        1,1,1,0,0,0,0,0,0,0,1,1
-    ]),
-    bytearray([    # Layer 1 data
-        175,7,169,254,237,255,191,157,190,233,255,175,
-        1,1,0,1,1,1,1,1,1,1,1,1
-    ]),
-    30, 15         # Position
-)
-
-dx = dy = 1
-while True:
-    gs.fill(gs.WHITE)
-    gs.drawSprite(cat)
-    cat.x += dx
-    cat.y += dy
-    if cat.x == 0 or cat.x == 60:
-        dx = -1 * dx
-    if cat.y == 0 or cat.y == 31:
-        dy = -1 * dy
-    gs.update()
-    sleep_ms(50)
-
-    if thumby.actionPressed():
-        break
-
-# Full screen images demo
+# Sprites as full screen images
 
 girlSprite = grayscale.Sprite(72, 40, bytearray([
     128,4,160,8,130,32,8,162,0,40,130,8,160,10,64,39,53,187,234,149,106,181,214,253,135,1,81,44,210,40,74,180,192,40,129,1,135,207,191,254,232,218,144,96,1,131,7,13,30,59,237,246,217,38,219,171,94,173,106,225,148,64,8,130,32,8,162,0,40,2,144,4,
@@ -105,6 +95,83 @@ gs.drawSprite(parrotSprite)
 gs.update()
 waitKey()
 
-gs.stop()
+# Cat animation using a sprite
 
-thumby.reset()
+cat = grayscale.Sprite(
+    12, 9,         # Dimensions
+    bytearray([    # Layer 2 data
+        255,255,87,7,3,3,3,67,3,7,7,255,
+        1,1,1,0,0,0,0,0,0,0,1,1
+    ]),
+    bytearray([    # Layer 1 data
+        175,7,169,254,237,255,191,157,190,233,255,175,
+        1,1,0,1,1,1,1,1,1,1,1,1
+    ]),
+    30, 15         # Position
+)
+
+dx = dy = 1
+while True:
+    gs.fill(gs.WHITE)
+    gs.drawSprite(cat)
+    cat.x += dx
+    cat.y += dy
+    if cat.x == 0 or cat.x == 60:
+        dx = -1 * dx
+    if cat.y == 0 or cat.y == 31:
+        dy = -1 * dy
+    gs.update()
+    sleep_ms(50)
+
+    if actionPressed():
+        break
+
+# Wait for key release
+while actionPressed(): pass
+
+# Bounce animation using drawing primitives
+
+fps = -1
+dx = 1
+dy = 0
+x = y = 0
+frame_rate = 30
+frame_microsec = int(1000000.0 / frame_rate)
+while not actionPressed():
+    t0 = ticks_us()
+    gs.fill(3)
+    gs.drawFilledRectangle(x, y+0, 12, 4, gs.LIGHTGRAY)
+    gs.drawFilledRectangle(x, y+4, 12, 4, gs.DARKGRAY)
+    gs.drawFilledRectangle(x, y+8, 12, 4, gs.BLACK)
+
+    gs.setPixel(0, 0, gs.BLACK)
+    gs.setPixel(71, 0, gs.BLACK)
+    gs.setPixel(0, 39, gs.BLACK)
+    gs.setPixel(71, 39, gs.BLACK)
+    gs.drawText(str(fps >> 4), 2, 2, gs.LIGHTGRAY)
+
+    gs.show()
+
+    x += dx
+    if x < 0 or x > 72-12:
+        dx = -dx
+    y += dy >> 16
+    dy += 16384
+    if y >= 30:
+        dy = (-dy * 50000) >> 16
+
+    td = ticks_diff(ticks_us(), t0)
+    if td == 0:
+        td = 1
+    fpsn = (1000000<<4)//td
+    if fps == -1:
+        fps = fpsn
+    else:
+        fps += (fpsn - fps) >> 5
+    sleep_ms((frame_microsec - ticks_diff(ticks_us(), t0)) >> 10)
+    sleep_us(frame_microsec - ticks_diff(ticks_us(), t0) - 12)
+
+# End of demo!
+
+gs.stop()
+reset()
