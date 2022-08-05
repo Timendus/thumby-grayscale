@@ -1,10 +1,9 @@
 # Grayscale on Thumby
 
-This is a little library to bring **grayscale** to the
-[Thumby](https://thumby.us/)!
+This library brings **grayscale** to the [Thumby](https://thumby.us/)!
 
 The Thumby display is intended to only be able to show black and white images.
-But we can flicker images really quickly and get a pretty convincing grayscale
+But we can flicker images really quickly and get a very convincing grayscale
 picture 📺✨
 
 ![Showing a grayscale image on the Thumby](./pictures/girl_on_thumby.jpeg)
@@ -18,6 +17,9 @@ to do any special magic in your main loop or rendering logic to show the
 grayscale effect. Just import and start the library, and use its functions
 instead of the functions of `thumby.display`.
 
+We have dubbed the second core that's running the grayscale thread the GPU:
+_Grayscale Processing Unit_ 😉
+
 ### Caveats
 
 Before we get started, make sure you are aware of the limitations of this
@@ -26,22 +28,17 @@ library:
 * The [code.thumby.us](https://code.thumby.us) Thumby emulator is not
   multithreaded. That's why this library **DOES NOT WORK in the emulator AT
   ALL!**
-* Touching flash memory while the grayscale thread is running sometimes
-  **crashes the Thumby**. The solution is to stop the grayscale thread, save
-  your file or whatever you want to do, and then restart the thread.
-* The framerate limiting logic of `thumby.display` (`update` and `setFPS`) has
-  not (yet) been implemented. This is not a technical limitation or anything,
-  I've just been too lazy so far 😉
-* The grayscale image is not perfectly stable. Depending on the timing settings
-  and the image shown, it flickers a bit and some banding may occur. This
-  may **not be suitable for people who suffer from epilepsy**. Also, you may
-  just find the quality unsuitable for your application.
-* This is very experimental and **may hurt your Thumby's display** long term. I
-  don't know for sure that it doesn't, it hasn't been used for long enough to
-  know. It will also probably **drain the battery** pretty quickly.
-
-So in short: Don't rely on this library for anything if you're not the
-adventurous type 😉
+* This library requires **MicroPython v1.19.1 or higher**. Trying to initialize
+  the library on anything lower will throw an exception.
+* The grayscale image is pretty stable. But it's basically still just flashing
+  images one after another in quick succession. This may **not be suitable for
+  people who suffer from epilepsy**.
+* It's still pretty early-days for grayscale on the Thumby and we don't know for
+  sure that this will not **hurt your Thumby's display** long term. We've been
+  doing quite a lot of testing with it though, and so far zero Thumbys have
+  developed issues.
+* It will probably **drain the battery** faster because it's doing some pretty
+  CPU intensive things.
 
 Having said all that, let's get some grayscale going! 😄 See
 [`GrayscaleTest.py`](./Games/GrayscaleTest/GrayscaleTest.py) for a complete
@@ -61,20 +58,23 @@ sys.path.insert(0, "/".join(__file__.split("/")[0:-1]))
 import grayscale
 ```
 
-Next, tell the Thumby library to not touch the display and tell the grayscale
-library to take over:
+Next, tell the grayscale library to take over the display:
 
 ```python
-thumby.display.setFPS(0)
 gs = grayscale.Grayscale()
 ```
+
+From here on, **do not** use any of the `thumbyGraphics` or `thumby.display`
+methods to draw things to the screen. If you do, the display will not show
+anything.
 
 ### Drawing in four colours
 
 Now we can use the drawing functions from the grayscale library (instead of the
-Thumby library) to put grayscale images on the screen. Nearly all functions of
-`thumby.display` are available to use. Make sure you use `grayscale.Sprite`
-instead of `thumby.Sprite` though:
+Thumby libraries) to put grayscale images on the screen. All the functions you
+are used to are still available, but now require you to specify a colour or to
+supply two layers of bitmap data. Make sure you use `grayscale.Sprite` for your
+sprites:
 
 ```python
 cat = grayscale.Sprite(
@@ -90,6 +90,7 @@ cat = grayscale.Sprite(
     30, 15         # Position
 )
 gs.drawSprite(cat)
+gs.update()
 ```
 
 As you can see, sprites are now composed of two layers instead of just a single
@@ -110,6 +111,7 @@ gs.fill(gs.BLACK)
 gs.drawFilledRectangle(16, 9, 40, 21, gs.WHITE)
 gs.drawText("Hello", 18, 11, gs.LIGHTGRAY)
 gs.drawText("world!", 18, 19, gs.DARKGRAY)
+gs.update()
 ```
 
 | Constant       | Value | Colour                                           |
@@ -125,16 +127,14 @@ For more advanced stuff, you may want to access the display buffers for the two
 grayscale layers directly. These exist in two `bytearray`s at these locations:
 
 ```python
-gs.gsBuffer1.buffer
-gs.gsBuffer2.buffer
+gs.buffer1
+gs.buffer2
 ```
 
 You can wrap these in a
 [`FrameBuffer`](https://docs.micropython.org/en/v1.15/library/framebuf.html) if
 you want, and manipulate the `bytearray`s to your heart's content. Make sure you
-call `gs._joinBuffers()` after you are done manipulating though, so the colours
-are correct. See below at [On colours and the "third
-layer"](#on-colours-and-the-third-layer) for more background information.
+call `gs.update()` or `gs.show()` afterwards, to show the result on the screen.
 
 ### Stopping
 
@@ -145,42 +145,73 @@ and white, make sure you stop the grayscale library's thread:
 gs.stop()
 ```
 
-# Implementation notes and links
+## Implementation notes and links
 
 The Thumby uses the SSD1306 display driver chip. According to some people in the
 Arduboy community, some versions of this chip have a ["hidden pin" called
 FR](https://community.arduboy.com/t/what-is-pin-7-on-the-oled-nothing/2740/35),
 that allows for [perfect
 synchronisation](https://community.arduboy.com/t/greyscale-2bit-4-colour-success-with-ssd1306/6835).
-
 However, as far as we know this synchronisation is not available to us on the
-Thumby. So instead, we have to match our synchronisation frequency by trial and
-error, and even then, accept some noise in the image. At least until someone
-figures out a way to synchronize our code to the display driver in some other
-way.
+Thumby. So instead we have to match the synchronisation frequency in software
+somehow.
+
+We have first done this by having a second thread on the CPU sleep for a fixed
+number of microseconds, the value of which was found by trial and error. This
+kinda worked, but resulted in a fairly unstable, somewhat noisy image.
+
+But then @Doogle figured out a way to synchronize our code to the display driver
+in a more clever way, by "resetting" the display controller in such a way that
+we can absorb the margin of error in the timing. I'll let him explain further:
+
+### How the grayscale effect is achieved
+
+The method used to create reduced flicker greyscale using the SSD1306 uses
+certain assumptions about the internal behaviour of the controller. Even though
+the behaviour seems to back up those assumptions, it is possible that the
+assumptions are incorrect but the desired result is achieved anyway. To simplify
+things, the following is written as if the assumptions _are_ correct.
+
+We keep the display synchronised by resetting the row counter before each frame
+and then outputting a frame of 57 rows. This is 17 rows past the 40 of the
+actual display.
+
+Prior to loading in the frame we park the row counter at row 0 and wait for the
+nominal time for 8 rows to be output. This (hopefully) provides enough time for
+the row counter to reach row 0 before it sticks there. (Note: recent test
+indicate that perhaps the current row actually jumps before parking)
+
+![An approximation of what the thread is doing and what we think is happening
+inside the controller](./explainer-animation/explainer-animation.gif)<br/> _An
+approximation of what the thread is doing and what we think is happening inside
+the controller_
+
+The 'parking' is done by setting the number of rows (aka 'multiplex ratio') to 1
+row. This is an invalid setting according to the datasheet but seems to still
+have the desired effect.
+
+Once the frame has been loaded into the display controller's GDRAM, we set the
+controller to output 57 rows, and then delay for the nominal time for 48 rows to
+be output.
+
+Considering the 17 row 'buffer space' after the real 40 rows, that puts us
+around halfway between the end of the display, and the row at which it would
+wrap around.
+
+By having 8.5 rows either side of the nominal timing, we can absorb any
+variation in the frequency of the display controller's RC oscillator as well as
+any timing offsets introduced by the Python code.
+
+We further enhance the greys by modulating the contrast differently for each
+frame.
+
+### Other links
 
 This library gains some speed by bypassing the [Thumby
 library](https://github.com/TinyCircuits/TinyCircuits-Thumby-Code-Editor/blob/master/ThumbyGames/lib/thumby.py)
 and even the [wrapper library for the display
 driver](https://github.com/micropython/micropython/blob/master/drivers/display/ssd1306.py).
-That is why the code that shows the buffers on
-the display may seem a bit foreign.
 
 For more information on the multithreading used, see the [regular Python
 documentation on
 threading](https://docs.python.org/3.7/library/_thread.html#module-_thread).
-
-## On colours and the "third layer"
-
-The grays are a little too light when just naively showing one layer for two
-thirds of the time and the other layer for one third of the time. The "dark"
-gray is more like a medium gray and the light gray is close to invisible. Which
-is why I opted to have three "layers": showing layer one for half the time,
-layer two for a quarter of the time and **both layers** (as the "third layer")
-for the last quarter. This effectively shows dark gray for three quarters of the
-time and light gray for half the time, which gives a much better result.
-
-The third layer is managed automatically, and is only of concern if you're
-bypassing the GraphicsClass functions and manipulating the GsBuffers yourself.
-In that case, call `gs._joinBuffers()` after manipulating the first two layers
-to generate the third.
