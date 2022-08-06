@@ -4,62 +4,141 @@
 # Shows six different screens, then reboots. Cycle through the screens by
 # pressing A or B.
 
+#
+'''
+import thumbyGrayscale
+thumby.display = thumbyGrayscale.display
+thumbyGrayscale.display.startGPU()
+'''
+#
+
+
+from machine import freq
+freq(200000000)
+
 # Fix import path so it finds the grayscale library
 import sys
-sys.path.insert(0, "/".join(__file__.split("/")[0:-1]))
 
 # Import dependencies
-from thumbyButton import actionPressed
 from machine import reset
-from time import sleep_ms
+import thumby
+from framebuf import FrameBuffer, MONO_VLSB
+from time import ticks_ms, sleep_ms
 from utime import ticks_us, sleep_us, ticks_diff
-import grayscale
+import thumbyGrayscale as grayscale
 
 # Initialization
+gs = grayscale.display
+#gs.startGPU()
+gs.poweroff()
+gs.poweron()
 
-gs = grayscale.Grayscale()
+# Test suite
+assert gs.width == 72, "height"
+assert gs.height == 40, "width"
 
-# Helper function
+def legacy_sprite(spr):
+    ### Converts V2 Grayscale sprites to ThumbyAPI format ###
+    # 0 0 -> 0 0 # Black
+    # 1 0 -> 0 1 # Dark gray
+    # 0 1 -> 1 1 # Light gray
+    # 1 1 -> 1 0 # White
+    b1 = spr.bitmap
+    b2 = spr.bitmapSHD
+    for i in range(0, len(b1)):
+        a1 = b1[i]
+        a2 = b2[i]
+        b1[i] = a2
+        b2[i] = a1^a2
+    return spr
 
-def waitKey():
-    while actionPressed(): pass
-    while not actionPressed(): pass
-    while actionPressed(): pass
+# thumbyGrayscale TODO:
+# _WIDTH of 72, 71
+# _HEIGHT of 40, 39
+# Find where while loops should be for loops
 
-# Directly writing to the buffers
+# TODO: test brightness on both GPU and BW
 
-for s in range(4):
-    if s & 1:
-        m1 = 0xff
-    else:
-        m1 = 0
-    if s & 2:
-        m2 = 0xff
-    else:
-        m2 = 0
-    sx = s * 18
-    for y in range(5):
-        sy = y * 72
-        for x in range(18):
-            gs.buffer1[sy + sx + x] = m1
-            gs.buffer2[sy + sx + x] = m2
-gs.show()
-waitKey()
+# Drawing primitives demo
 
-# Drawing primitives
-
-gs.drawFilledRectangle(0, 0, 72, 40, gs.WHITE)
-gs.drawFilledRectangle(0, 0, 62, 30, gs.LIGHTGRAY)
-gs.drawFilledRectangle(0, 0, 52, 20, gs.DARKGRAY)
-gs.drawFilledRectangle(0, 0, 42, 10, gs.BLACK)
-gs.drawText("Hello", 2, 31, gs.LIGHTGRAY)
-gs.drawText("world!", 37, 31, gs.DARKGRAY)
+gs.fill(gs.DARKGRAY)
+gs.drawFilledRectangle(16, 9, 40, 21, gs.LIGHTGRAY)
+gs.drawRectangle(14, 7, 44, 25, gs.LIGHTGRAY)
+gs.drawLine(14, 32, 55, 39, gs.LIGHTGRAY)
+gs.drawLine(58, 7, 71, 30, gs.LIGHTGRAY)
+gs.drawText("Hello", 18, 11, gs.WHITE)
+gs.drawText("world!", 18, 19, gs.DARKGRAY)
 gs.update()
-waitKey()
+sleep_ms(500)
 
-# Sprites as full screen images
+gs.startGPU()
 
-girlSprite = grayscale.Sprite(72, 40, bytearray([
+gs.fill(gs.DARKGRAY)
+gs.drawFilledRectangle(16, 9, 40, 21, gs.LIGHTGRAY)
+gs.drawRectangle(14, 7, 44, 25, gs.LIGHTGRAY)
+gs.drawLine(14, 32, 55, 39, gs.LIGHTGRAY)
+gs.drawLine(58, 7, 71, 30, gs.LIGHTGRAY)
+gs.drawText("Hello", 18, 11, gs.WHITE)
+gs.drawText("world!", 18, 19, gs.DARKGRAY)
+gs.update()
+sleep_ms(1000)
+
+# Bouncing cat demo
+
+cat = legacy_sprite(grayscale.ShadedSprite(
+    12, 9,         # Dimensions
+    bytearray([    # Layer 2 data
+        255,255,87,7,3,3,3,67,3,7,7,255,
+        1,1,1,0,0,0,0,0,0,0,1,1
+    ]),
+    bytearray([    # Layer 1 data
+        175,7,169,254,237,255,191,157,190,233,255,175,
+        1,1,0,1,1,1,1,1,1,1,1,1
+    ]),
+    30, 15         # Position
+))
+catMask = grayscale.ShadedSprite(
+    12, 9,         # Dimensions
+    bytearray([0,7,1,0,1,1,1,1,0,1,7,223,
+           1,1,0,0,0,0,0,0,0,0,1,1]),
+    bytearray([0,7,1,0,1,1,1,1,0,1,7,223,
+           1,1,0,0,0,0,0,0,0,0,1,1]),
+    30, 15         # Position
+)
+
+thumby.display = gs
+
+gs.setFPS(60)
+
+c = 1
+while(thumby.buttonA.pressed() == False and thumby.buttonB.pressed() == False and c<100):
+    if(ticks_ms() % 1000 < 500):
+        thumby.display.drawFilledRectangle(0, 32, 72, 8, 0)
+        thumby.display.drawText("Press A/B", 9, 32, 1)
+    else:
+        thumby.display.drawFilledRectangle(0, 32, 72, 8, 1)
+        thumby.display.drawText("Press A/B", 9, 32, 0)
+    thumby.display.update()
+    c += 1
+    pass
+
+c = dx = dy = 1
+while c < 200:
+    gs.fill(gs.LIGHTGRAY)
+    gs.drawSpriteWithMask(cat, catMask)
+    cat.x += dx
+    cat.y += dy
+    if cat.x == 0 or cat.x == 60:
+        dx = -1 * dx
+    if cat.y == 0 or cat.y == 31:
+        dy = -1 * dy
+    gs.update()
+    #sleep_ms(50)
+    c += 1
+
+
+# Full screen images demo
+girlSprite = legacy_sprite(grayscale.ShadedSprite(72, 40, bytearray([
     128,4,160,8,130,32,8,162,0,40,130,8,160,10,64,39,53,187,234,149,106,181,214,253,135,1,81,44,210,40,74,180,192,40,129,1,135,207,191,254,232,218,144,96,1,131,7,13,30,59,237,246,217,38,219,171,94,173,106,225,148,64,8,130,32,8,162,0,40,2,144,4,
     0,84,0,18,64,136,2,168,2,80,10,64,10,160,5,168,1,85,135,30,189,122,127,103,37,134,17,0,133,64,3,1,11,141,6,181,20,31,15,87,79,215,255,255,216,32,193,160,112,208,248,243,239,159,124,235,212,187,69,186,215,94,248,200,130,32,10,160,5,80,4,0,
     0,149,32,133,80,8,66,40,2,169,4,81,8,162,8,146,36,129,40,130,104,213,74,136,224,224,192,68,198,201,134,192,137,64,2,224,16,232,182,125,255,255,255,255,107,206,63,191,222,127,71,241,215,127,244,0,3,15,61,126,233,246,219,255,16,74,0,74,32,5,168,1,
@@ -71,9 +150,9 @@ girlSprite = grayscale.Sprite(72, 40, bytearray([
     0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,128,224,240,119,31,31,63,59,57,54,121,63,127,191,255,31,239,23,73,130,0,0,0,0,0,0,0,64,0,0,0,0,40,128,0,0,0,0,2,1,22,9,36,0,0,0,0,0,0,0,0,0,
     0,0,0,0,0,0,0,0,0,0,0,0,0,240,248,248,252,254,254,255,255,255,235,0,224,248,254,78,0,1,28,13,15,2,11,2,1,0,0,0,128,192,64,0,0,0,88,2,0,0,0,0,0,55,64,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
     0,0,0,0,0,0,0,0,0,128,128,128,252,255,255,255,255,255,255,255,127,255,127,62,63,31,7,0,0,0,128,192,224,224,240,240,240,240,248,246,255,250,253,60,252,28,253,30,160,0,0,0,0,0,5,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-]))
+])))
 
-parrotSprite = grayscale.Sprite(72, 40, bytearray([
+parrotSprite = legacy_sprite(grayscale.ShadedSprite(72, 40, bytearray([
     160,64,0,0,0,0,0,0,0,0,0,48,208,228,218,98,209,161,194,1,2,5,138,3,203,133,133,43,141,23,13,47,95,86,174,95,94,183,95,39,79,55,31,118,30,78,54,172,244,212,246,249,185,231,72,160,0,164,210,0,128,232,64,96,102,97,116,242,224,244,245,106,
     0,0,0,20,40,4,40,4,18,72,16,189,168,62,236,89,131,223,126,8,70,249,148,237,242,181,249,189,218,55,136,165,20,161,68,34,235,32,69,0,72,4,4,24,4,74,4,148,0,2,1,32,4,0,133,106,179,247,94,232,149,73,107,19,245,86,236,233,100,157,139,140,
     0,64,64,64,0,128,0,0,88,40,192,1,105,50,32,24,31,254,223,222,188,75,187,23,247,9,231,193,15,129,6,0,130,0,64,144,64,136,160,72,176,64,160,64,160,248,232,112,32,8,0,8,0,0,0,1,23,14,60,48,32,10,40,145,1,3,5,18,3,14,63,91,
@@ -85,49 +164,26 @@ parrotSprite = grayscale.Sprite(72, 40, bytearray([
     128,128,128,128,128,0,0,0,0,0,0,128,135,207,223,231,224,0,0,0,3,7,7,15,15,31,31,63,255,127,255,255,127,255,191,111,191,119,95,183,79,191,95,191,95,7,23,143,223,247,255,247,255,255,255,255,255,255,255,255,255,245,215,111,255,255,255,253,252,241,192,132,
     207,207,203,195,131,0,128,240,124,62,222,255,223,223,143,147,159,33,7,13,19,4,4,0,0,0,0,3,0,0,1,6,3,3,0,1,2,3,0,1,6,2,5,3,0,2,133,11,198,33,213,99,85,177,231,90,181,239,187,239,63,239,94,184,231,5,23,127,151,127,251,71,
     54,125,56,153,128,16,254,105,14,143,141,131,6,73,247,170,4,16,64,2,4,0,0,0,0,0,0,0,0,0,0,0,0,128,0,128,32,128,80,128,0,160,0,144,0,131,8,67,20,67,21,178,79,181,74,189,134,187,86,189,11,64,181,105,210,128,64,0,19,127,2,132
-]))
+])))
 
+gs.startGPU()
 gs.drawSprite(girlSprite)
 gs.update()
-waitKey()
+sleep_ms(1000)
+gs.stopGPU(1)
+gs.drawSprite(girlSprite)
+gs.update()
+sleep_ms(1000)
 
+gs.startGPU()
 gs.drawSprite(parrotSprite)
 gs.update()
-waitKey()
+sleep_ms(1000)
 
-# Cat animation using a sprite
+gs.stopGPU(1)
+sleep_ms(1000)
 
-cat = grayscale.Sprite(
-    12, 9,         # Dimensions
-    bytearray([    # Layer 2 data
-        255,255,87,7,3,3,3,67,3,7,7,255,
-        1,1,1,0,0,0,0,0,0,0,1,1
-    ]),
-    bytearray([    # Layer 1 data
-        175,7,169,254,237,255,191,157,190,233,255,175,
-        1,1,0,1,1,1,1,1,1,1,1,1
-    ]),
-    30, 15         # Position
-)
-
-dx = dy = 1
-while True:
-    gs.fill(gs.WHITE)
-    gs.drawSprite(cat)
-    cat.x += dx
-    cat.y += dy
-    if cat.x == 0 or cat.x == 60:
-        dx = -1 * dx
-    if cat.y == 0 or cat.y == 31:
-        dy = -1 * dy
-    gs.update()
-    sleep_ms(50)
-
-    if actionPressed():
-        break
-
-# Wait for key release
-while actionPressed(): pass
+gs.startGPU()
 
 # Bounce animation using drawing primitives
 
@@ -137,9 +193,10 @@ dy = 0
 x = y = 0
 frame_rate = 30
 frame_microsec = int(1000000.0 / frame_rate)
-while not actionPressed():
+c = 1
+while c < 100:
     t0 = ticks_us()
-    gs.fill(3)
+    gs.fill(1)
     gs.drawFilledRectangle(x, y+0, 12, 4, gs.LIGHTGRAY)
     gs.drawFilledRectangle(x, y+4, 12, 4, gs.DARKGRAY)
     gs.drawFilledRectangle(x, y+8, 12, 4, gs.BLACK)
@@ -170,8 +227,9 @@ while not actionPressed():
         fps += (fpsn - fps) >> 5
     sleep_ms((frame_microsec - ticks_diff(ticks_us(), t0)) >> 10)
     sleep_us(frame_microsec - ticks_diff(ticks_us(), t0) - 12)
+    c += 1
 
 # End of demo!
 
-gs.stop()
-reset()
+gs.stopGPU()
+freq(48000000)
