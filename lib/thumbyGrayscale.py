@@ -7,6 +7,12 @@ from ssd1306 import SSD1306_SPI
 from thumbyButton import buttonA, buttonB, buttonU, buttonD, buttonL, buttonR
 from thumbySprite import Sprite as _Sprite
 
+emulator = None
+try:
+    import emulator
+except ImportError:
+    pass
+
 # The times below are calculated using phase 1 and phase 2 pre-charge
 # periods of 1 clock.
 # Note that although the SSD1306 datasheet doesn't state it, the 50
@@ -68,11 +74,11 @@ class Grayscale:
         # with the display buffer from the standard Thumby API,
         # and the second contains the shading to create
         # offwhite (lightgray) or offblack (darkgray).
-        self._drawBuffer = bytearray(_BUFF_SIZE*2)
+        self.drawBuffer = bytearray(_BUFF_SIZE*2)
         # The base "buffer" matches compatibility with the std Thumby API.
-        self.buffer = memoryview(self._drawBuffer)[:_BUFF_SIZE]
+        self.buffer = memoryview(self.drawBuffer)[:_BUFF_SIZE]
         # The "shading" buffer adds the grayscale
-        self.shading = memoryview(self._drawBuffer)[_BUFF_SIZE:]
+        self.shading = memoryview(self.drawBuffer)[_BUFF_SIZE:]
 
         # Display device configuration
         self._spi = SPI(0, sck=Pin(18), mosi=Pin(19))
@@ -86,6 +92,7 @@ class Grayscale:
             self._spi, dc=self._dc, res=self._res, cs=self._cs)
         # Inject buffer to Black and White display
         self._displayBW.buffer = self.buffer
+        self._initEmuScreen()
 
         # Display driver subframe buffers.
         # These essentially combine into one framebuffer,
@@ -173,6 +180,21 @@ class Grayscale:
 
     ## Display device functions ##
 
+
+    @micropython.viper
+    def _initEmuScreen(self):
+        if not emulator:
+            return
+        # Register draw buffer with emulator
+        emulator.screen_breakpoint(ptr16(self.drawBuffer))
+        # Disable device controller functions
+        def _disabled(*arg, **kwdarg):
+            pass
+        self.reset = _disabled
+        self.poweron = _disabled
+        self.poweroff = _disabled
+        self.init_display = _disabled
+        self.write_cmd = _disabled
 
     def reset(self):
         self._res(1)
@@ -275,6 +297,12 @@ class Grayscale:
         # When the GPU is not running, the display will only show
         # black and white.
         ###
+        if emulator:
+            # Activate grayscale emulation
+            emulator.screen_breakpoint(1)
+            self.show()
+            return
+
         if self._state[_ST_THREAD] != _THREAD_STOPPED:
             self.stopGPU()
 
@@ -299,7 +327,7 @@ class Grayscale:
         preFrameCmds = self._preFrameCmds
         postFrameCmds = self._postFrameCmds
         pendingCmds = self._pendingCmds
-        dBuf = ptr32(self._drawBuffer)
+        dBuf = ptr32(self.drawBuffer)
         b1 = ptr32(buffers[0]); b2 = ptr32(buffers[1]); b3 = ptr32(buffers[2])
 
         dc(0) # command mode
@@ -361,7 +389,7 @@ class Grayscale:
                 # We use sleep_ms first to allow idle loop usage,
                 # with >>10 for a fast /1000 approximation.
                 # Then we use sleep_us to busy wait for the precise time.
-                sleep_ms((_FRAME_TIME - int(ticks_diff(ticks_us(), t0))) >> 10)
+                # TODO sleep_ms((_FRAME_TIME - int(ticks_diff(ticks_us(), t0))) >> 10)
                 sleep_us(_FRAME_TIME - int(ticks_diff(ticks_us(), t0)))
 
         # Announce the thread is done
@@ -372,6 +400,12 @@ class Grayscale:
         # If modeGPU is set to 1, it will not reset the display
         # controller configuration.
         ###
+        if emulator:
+            # Disable grayscale emulation
+            emulator.screen_breakpoint(0)
+            self.show()
+            return
+
         if self._state[_ST_THREAD] == _THREAD_RUNNING:
             self._state[_ST_THREAD] = _THREAD_STOPPING
             while self._state[_ST_THREAD] != _THREAD_STOPPED:
@@ -391,7 +425,7 @@ class Grayscale:
 
     @micropython.viper
     def fill(self, colour:int):
-        dBuf = ptr32(self._drawBuffer)
+        dBuf = ptr32(self.drawBuffer)
         f = -1 if colour & 1 else 0
         for i in range(_BUFF_INT_SIZE):
             dBuf[i] = f # Black/White layer
@@ -448,7 +482,7 @@ class Grayscale:
             y2 = 40
             height = 40 - y
 
-        dBuff = ptr8(self._drawBuffer)
+        dBuff = ptr8(self.drawBuffer)
 
         o = (y >> 3) * 72
         oe = o + x2
@@ -515,7 +549,7 @@ class Grayscale:
         o = (y >> 3) * 72 + x
         m = 1 << (y & 7)
         im = 255-m
-        dBuff = ptr8(self._drawBuffer)
+        dBuff = ptr8(self.drawBuffer)
         if colour & 1:
             dBuff[o] |= m
         else:
@@ -531,7 +565,7 @@ class Grayscale:
             return 0
         o = (y >> 3) * 72 + x
         m = 1 << (y & 7)
-        dBuff = ptr8(self._drawBuffer)
+        dBuff = ptr8(self.drawBuffer)
         colour = 0
         if dBuff[o] & m:
             colour = 1
@@ -555,7 +589,7 @@ class Grayscale:
             sx = -1
         x = x0
         y = y0
-        dBuff = ptr8(self._drawBuffer)
+        dBuff = ptr8(self.drawBuffer)
 
         o = (y >> 3) * 72 + x
         m = 1 << (y & 7)
@@ -624,7 +658,7 @@ class Grayscale:
 
     @micropython.viper
     def drawText(self, stringToPrint, x:int, y:int, colour:int):
-        dBuff = ptr8(self._drawBuffer)
+        dBuff = ptr8(self.drawBuffer)
         font_bmap = ptr8(self.font_bmap)
         font_width = int(self.font_width)
         font_space = int(self.font_space)
@@ -677,7 +711,7 @@ class Grayscale:
             return
         if y+height < 0 or y >= 40:
             return
-        dBuff = ptr8(self._drawBuffer)
+        dBuff = ptr8(self.drawBuffer)
 
         stride = width
 
@@ -776,7 +810,7 @@ class Grayscale:
             return
         if y+height < 0 or y >= 40:
             return
-        dBuf = ptr8(self._drawBuffer)
+        dBuf = ptr8(self.drawBuffer)
 
         stride = width
 
