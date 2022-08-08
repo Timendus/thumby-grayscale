@@ -29,7 +29,6 @@ import thumbyGrayscale as grayscale
 
 # Initialization
 gs = grayscale.display
-#gs.startGPU()
 gs.poweroff()
 gs.poweron()
 
@@ -124,7 +123,7 @@ while(thumby.buttonA.pressed() == False and thumby.buttonB.pressed() == False an
 
 c = dx = dy = 1
 while c < 200:
-    gs.fill(gs.LIGHTGRAY)
+    gs.fill(gs.DARKGRAY)
     gs.drawSpriteWithMask(cat, catMask)
     cat.x += dx
     cat.y += dy
@@ -194,9 +193,10 @@ x = y = 0
 frame_rate = 30
 frame_microsec = int(1000000.0 / frame_rate)
 c = 1
-while c < 100:
+while c < 210:
     t0 = ticks_us()
-    gs.fill(1)
+    gs.fill(gs.WHITE if c < 100 else gs.BLACK)
+    gs.drawFilledRectangle(x, y-4, 12, 4, gs.WHITE)
     gs.drawFilledRectangle(x, y+0, 12, 4, gs.LIGHTGRAY)
     gs.drawFilledRectangle(x, y+4, 12, 4, gs.DARKGRAY)
     gs.drawFilledRectangle(x, y+8, 12, 4, gs.BLACK)
