@@ -455,7 +455,7 @@ class Grayscale:
             # Apply the contrast directly to the display
             self._displayBW.contrast(c)
             if emulator:
-                emulator.brightness_breakpoint(setting)
+                emulator.brightness_breakpoint(c)
         # Save the intended contrast for whenever the GPU stops
         self._brightness = c <<1|1
 
