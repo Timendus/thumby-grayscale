@@ -139,34 +139,33 @@ class Grayscale:
         # 0xa8,57-1 Set multiplex ratio to 57
         self._postFrameCmds = bytearray([0xd3,40+(64-57), 0xa8,57-1])
 
-        # Brightness modulation.
-        # We enhance the greys by modulating the contrast,
-        # limited to brightness setting from thumby.cfg
-        brightness = 127
-        try:
-            with open("thumby.cfg", "r") as fh:
-                _, _, conf = fh.read().partition("brightness,")
-                b = int(conf.split(',')[0])
-                # Set to the relevant brightness level
-                brightness = 0 if b==0 else 56 if b==1 else 127
-        except (OSError, ValueError):
-            pass
-        # 0x81,<val>    Set Bank0 contrast value to <val>
-        self._postFrameAdj = array('O', [
-            bytearray([0x81,brightness>>5]),
-            bytearray([0x81,brightness]),
-            bytearray([0x81,(brightness << 1) + 1])])
-
         # It's safer to avoid using regular variables for shared thread data.
         # Instead, elements of an array/bytearray should be used.
         # We're also using a uint32 array here, as thsis more likely to ensure
         # the atomicity of any element accesses.
         # [thread_state, buff_copy_gate, pending_cmd_gate, constrast_change]
-        self._state = array('I', [_THREAD_STOPPED,0,0,0xff])
+        self._state = array('I', [_THREAD_STOPPED,0,0,0])
         # Buffer to funnel cmds to the thread
         self._pendingCmds = bytearray([0] * 8)
         # Set font, also supports: self.setFont('lib/font8x8.bin', 8, 8, 0)
         self.setFont('lib/font5x7.bin', 5, 7, 1)
+
+        # Brightness modulation.
+        # We enhance the greys by modulating the contrast,
+        # limited to brightness setting from thumby.cfg
+        # 0x81,<val>    GPU will set Bank0 contrast value to <val>
+        self._postFrameAdj = array('O', bytearray([0x81,0]) for i in range(3))
+        self._postFrameAdjSrc = bytearray(3)
+        self._brightness = 127
+        try:
+            with open("thumby.cfg", "r") as fh:
+                _, _, conf = fh.read().partition("brightness,")
+                b = int(conf.split(',')[0])
+                # Set to the relevant brightness level
+                self._brightness = 0 if b==0 else 56 if b==1 else 127
+        except (OSError, ValueError):
+            pass
+        self.brightness(self._brightness)
 
     # Allow use of 'with' for manaing the GPU state
     def __enter__(self):
@@ -321,6 +320,7 @@ class Grayscale:
         # cache various instance variables, buffers, and functions/methods
         buffers = self._subframes
         postFrameAdj = self._postFrameAdj
+        postFrameAdjSrc = ptr8(self._postFrameAdjSrc)
         state = ptr32(self._state)
         spi_write = self._spi.write
         dc = self._dc
@@ -363,7 +363,7 @@ class Grayscale:
                     # framebuffers on the last frame to avoid screen-tearing.
                     if (state[_ST_COPY_BUFFS] != 0):
                         # By using using ptr32 vars we copy 4 bytes at a time
-                        for i in range (_BUFF_INT_SIZE):
+                        for i in range(_BUFF_INT_SIZE):
                             v1 = dBuf[i]
                             v2 = dBuf[i+_BUFF_INT_SIZE]
                             # This remaps to the different buffer format.
@@ -372,13 +372,12 @@ class Grayscale:
                             b3[i] = v1 & (v1^v2) # white only
                         state[_ST_COPY_BUFFS] = 0
                     # Check if there's a pending contrast/brightness change
-                    elif (state[_ST_CONTRAST] != 0xff):
-                        contrast = state[_ST_CONTRAST]
-                        state[_ST_CONTRAST] = 0xff
-                        # Shift the value to provide 3 different levels
-                        postFrameAdj[0][1] = contrast >> 5
-                        postFrameAdj[1][1] = contrast >> 1
-                        postFrameAdj[2][1] = (contrast << 1) + 1
+                    if (state[_ST_CONTRAST]):
+                        # Copy in the new contrast adjustments
+                        postFrameAdj[0][1] = postFrameAdjSrc[0]
+                        postFrameAdj[1][1] = postFrameAdjSrc[1]
+                        postFrameAdj[2][1] = postFrameAdjSrc[2]
+                        state[_ST_CONTRAST] = 0
                     # Check if there are pending display controller commands
                     elif state[_ST_PENDING_CMD]:
                         spi_write(pendingCmds)
@@ -414,6 +413,8 @@ class Grayscale:
         if not modeGPU:
             self._displayBW.init_display()
         self.show()
+        # Change back to the original (unmodulated) brightness setting
+        self.brightness(self._brightness)
 
 
     ## GraphicsClass functions ##
@@ -433,15 +434,30 @@ class Grayscale:
         for i in range(_BUFF_INT_SIZE, _BUFF_INT_SIZE*2):
             dBuf[i] = f # Shading layer
 
-    def brightness(self, c):
-        if c < 0:
-            c = 0
-        elif c > 127:
-            c = 127
+    @micropython.viper
+    def brightness(self, c: int):
+        c = 0 if c<0 else 127 if c>127 else c
+        state = ptr32(self._state)
+        postFrameAdj = self._postFrameAdj
+        postFrameAdjSrc = ptr8(self._postFrameAdjSrc)
+        # Shift the value to provide 3 different subframe levels for the GPU
+        postFrameAdjSrc[0] = c >> 5
+        postFrameAdjSrc[1] = c >> 1
+        postFrameAdjSrc[2] = (c << 1) + 1
+        # Apply to display, GPU, and emulator
         if state[_ST_THREAD] == _THREAD_RUNNING:
-            self._state[_ST_CONTRAST] = c
+            state[_ST_CONTRAST] = 1
         else:
+            # Copy in the new contrast adjustments for when the GPU starts
+            postFrameAdj[0][1] = postFrameAdjSrc[0]
+            postFrameAdj[1][1] = postFrameAdjSrc[1]
+            postFrameAdj[2][1] = postFrameAdjSrc[2]
+            # Apply the contrast directly to the display
             self._displayBW.contrast(c)
+            if emulator:
+                emulator.brightness_breakpoint(setting)
+        # Save the intended contrast for whenever the GPU stops
+        self._brightness = c <<1|1
 
     @micropython.native
     def update(self):
