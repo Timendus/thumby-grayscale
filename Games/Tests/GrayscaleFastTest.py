@@ -16,13 +16,9 @@ thumbyGrayscale.display.startGPU()
 from machine import freq
 freq(200000000)
 
-# Fix import path so it finds the grayscale library
-import sys
-
 # Import dependencies
 from machine import reset
 import thumby
-from framebuf import FrameBuffer, MONO_VLSB
 from time import ticks_ms, sleep_ms
 from utime import ticks_us, sleep_us, ticks_diff
 import thumbyGrayscale as grayscale
@@ -50,13 +46,6 @@ def legacy_sprite(spr):
         b1[i] = a2
         b2[i] = a1^a2
     return spr
-
-# thumbyGrayscale TODO:
-# _WIDTH of 72, 71
-# _HEIGHT of 40, 39
-# Find where while loops should be for loops
-
-# TODO: test brightness on both GPU and BW
 
 # Drawing primitives demo
 
