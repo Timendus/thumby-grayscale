@@ -626,8 +626,8 @@ class Grayscale:
         c1, c2 = colour & 1, colour & 2
         ang = x0 != x1 and y0 != y1
 
-        err = dx >> 1
         if dx > dy:
+            err = dx >> 1
             while x != x1+1:
                 if 0 <= x < _WIDTH and 0 <= y < _HEIGHT:
                     if c1:
@@ -653,6 +653,7 @@ class Grayscale:
                 x += sx
                 o += sx
         else:
+            err = dy >> 1
             while y != y1+1:
                 if 0 <= x < _WIDTH and 0 <= y < _HEIGHT:
                     if c1:
