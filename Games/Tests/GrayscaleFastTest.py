@@ -24,6 +24,7 @@ from time import ticks_ms, sleep_ms
 from utime import ticks_us, sleep_us, ticks_diff
 import thumbyGrayscale as grayscale
 
+
 # Initialization
 gs = grayscale.display
 gs.poweroff()
@@ -129,9 +130,9 @@ while c < 200:
     cat.x += dx
     cat.y += dy
     if cat.x == 0 or cat.x == 60:
-        dx = -1 * dx
+        dx = -dx
     if cat.y == 0 or cat.y == 31:
-        dy = -1 * dy
+        dy = -dy
     gs.update()
     c += 1
 
@@ -142,9 +143,9 @@ while c < 200:
     catBW.x += dx
     catBW.y += dy
     if catBW.x == 0 or catBW.x == 60:
-        dx = -1 * dx
+        dx = -dx
     if catBW.y == 0 or catBW.y == 31:
-        dy = -1 * dy
+        dy = -dy
     gs.update()
     c += 1
 
