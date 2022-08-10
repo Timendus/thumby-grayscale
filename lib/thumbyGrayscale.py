@@ -137,7 +137,7 @@ class Grayscale:
         #           the calculation must work backwards from the last
         #.          controller row.
         # 0xa8,57-1 Set multiplex ratio to 57
-        self._postFrameCmds = bytearray([0xd3,40+(64-57), 0xa8,57-1])
+        self._postFrameCmds = bytearray([0xd3,_HEIGHT+(64-57), 0xa8,57-1])
 
         # It's safer to avoid using regular variables for shared thread data.
         # Instead, elements of an array/bytearray should be used.
@@ -481,7 +481,7 @@ class Grayscale:
 
     @micropython.viper
     def drawFilledRectangle(self, x:int, y:int, width:int, height:int, colour:int):
-        if x > 71 or y > 39 or width <= 0 or height <= 0:
+        if x >= _WIDTH or y >= _HEIGHT or width <= 0 or height <= 0:
             return
         if x < 0:
             width += x
@@ -491,19 +491,19 @@ class Grayscale:
             y = 0
         x2 = x + width
         y2 = y + height
-        if x2 > 72:
-            x2 = 72
-            width = 72 - x
-        if y2 > 40:
-            y2 = 40
-            height = 40 - y
+        if x2 > _WIDTH:
+            x2 = _WIDTH
+            width = _WIDTH - x
+        if y2 > _HEIGHT:
+            y2 = _HEIGHT
+            height = _HEIGHT - y
 
         dBuff = ptr8(self.drawBuffer)
 
-        o = (y >> 3) * 72
+        o = (y >> 3) * _WIDTH
         oe = o + x2
         o += x
-        strd = 72 - width
+        strd = _WIDTH - width
 
         v1 = 0xff if colour & 1 else 0
         v2 = 0xff if colour & 2 else 0
@@ -528,7 +528,7 @@ class Grayscale:
         height -= ybh
         while height >= 8:
             o += strd
-            oe += 72
+            oe += _WIDTH
             while o < oe:
                 dBuff[o] = v1
                 dBuff[o+_BUFF_SIZE] = v2
@@ -536,7 +536,7 @@ class Grayscale:
             height -= 8
         if height > 0:
             o += strd
-            oe += 72
+            oe += _WIDTH
             m = (1 << height) - 1
             im = 255-m
             while o < oe:
@@ -560,9 +560,9 @@ class Grayscale:
 
     @micropython.viper
     def setPixel(self, x:int, y:int, colour:int):
-        if x < 0 or x >= 72 or y < 0 or y >= 40:
+        if x < 0 or x >= _WIDTH or y < 0 or y >= _HEIGHT:
             return
-        o = (y >> 3) * 72 + x
+        o = (y >> 3) * _WIDTH + x
         m = 1 << (y & 7)
         im = 255-m
         dBuff = ptr8(self.drawBuffer)
@@ -577,9 +577,9 @@ class Grayscale:
 
     @micropython.viper
     def getPixel(self, x:int, y:int) -> int:
-        if x < 0 or x >= 72 or y < 0 or y >= 40:
+        if x < 0 or x >= _WIDTH or y < 0 or y >= _HEIGHT:
             return 0
-        o = (y >> 3) * 72 + x
+        o = (y >> 3) * _WIDTH + x
         m = 1 << (y & 7)
         dBuff = ptr8(self.drawBuffer)
         colour = 0
@@ -607,14 +607,14 @@ class Grayscale:
         y = y0
         dBuff = ptr8(self.drawBuffer)
 
-        o = (y >> 3) * 72 + x
+        o = (y >> 3) * _WIDTH + x
         m = 1 << (y & 7)
         im = 255-m
 
         if dx > dy:
             err = dx >> 1
             while x != x1+1:
-                if 0 <= x < 72 and 0 <= y < 40:
+                if 0 <= x < _WIDTH and 0 <= y < _HEIGHT:
                     if colour & 1:
                         dBuff[o] |= m
                     else:
@@ -628,7 +628,7 @@ class Grayscale:
                     y += 1
                     m <<= 1
                     if m & 0x100:
-                        o += 72
+                        o += _WIDTH
                         m = 1
                         im = 0xfe
                     else:
@@ -639,7 +639,7 @@ class Grayscale:
         else:
             err = dy >> 1
             while y != y1+1:
-                if 0 <= x < 72 and 0 <= y < 40:
+                if 0 <= x < _WIDTH and 0 <= y < _HEIGHT:
                     if colour & 1:
                         dBuff[o] |= m
                     else:
@@ -656,7 +656,7 @@ class Grayscale:
                 y += 1
                 m <<= 1
                 if m & 0x100:
-                    o += 72
+                    o += _WIDTH
                     m = 1
                     im = 0xfe
                 else:
@@ -683,8 +683,8 @@ class Grayscale:
         sm1a = 255 - sm1o
         sm2o = 0xff if colour & 2 else 0
         sm2a = 255 - sm2o
-        ou = (y >> 3) * 72 + x
-        ol = ou + 72
+        ou = (y >> 3) * _WIDTH + x
+        ol = ou + _WIDTH
         shu = y & 7
         shl = 8 - shu
         for c in stringToPrint:
@@ -696,7 +696,7 @@ class Grayscale:
                 gi = co * font_width
                 gx = 0
                 while gx < font_width:
-                    if 0 <= x < 72:
+                    if 0 <= x < _WIDTH:
                         gb = font_bmap[gi + gx]
                         gbu = gb << shu
                         gbl = gb >> shl
@@ -723,9 +723,9 @@ class Grayscale:
     @micropython.viper
     def blitSHD(self, sprtptr:ptr8, src2:ptr8, x:int, y:int, width:int, height:int, key:int, mirrorX:int, mirrorY:int):
         shading = int(src2)
-        if x+width < 0 or x >= 72:
+        if x+width < 0 or x >= _WIDTH:
             return
-        if y+height < 0 or y >= 40:
+        if y+height < 0 or y >= _HEIGHT:
             return
         dBuff = ptr8(self.drawBuffer)
 
@@ -746,8 +746,8 @@ class Grayscale:
                 srcx = 0 - dstx
                 width += dstx
                 dstx = 0
-        if dstx+width > 72:
-            width = 72 - dstx
+        if dstx+width > _WIDTH:
+            width = _WIDTH - dstx
         if mirrorY:
             srcy = height - 1
             if dsty < 0:
@@ -759,13 +759,13 @@ class Grayscale:
                 srcy = 0 - dsty
                 height += dsty
                 dsty = 0
-        if dsty+height > 40:
-            height = 40 - dsty
+        if dsty+height > _HEIGHT:
+            height = _HEIGHT - dsty
 
         srco = (srcy >> 3) * stride + srcx
         srcm = 1 << (srcy & 7)
 
-        dsto = (dsty >> 3) * 72 + dstx
+        dsto = (dsty >> 3) * _WIDTH + dstx
         dstm = 1 << (dsty & 7)
         dstim = 255 - dstm
 
@@ -791,7 +791,7 @@ class Grayscale:
                 i -= 1
             dstm <<= 1
             if dstm & 0x100:
-                dsto += 72
+                dsto += _WIDTH
                 dstm = 1
                 dstim = 0xfe
             else:
@@ -822,9 +822,9 @@ class Grayscale:
     @micropython.viper
     def blitWithMaskSHD(self, sprtptr:ptr8, src2:ptr8, x:int, y:int, width:int, height:int, key:int, mirrorX:int, mirrorY:int, mask:ptr8):
         shading = int(src2)
-        if x+width < 0 or x >= 72:
+        if x+width < 0 or x >= _WIDTH:
             return
-        if y+height < 0 or y >= 40:
+        if y+height < 0 or y >= _HEIGHT:
             return
         dBuf = ptr8(self.drawBuffer)
 
@@ -845,8 +845,8 @@ class Grayscale:
                 srcx = 0 - dstx
                 width += dstx
                 dstx = 0
-        if dstx+width > 72:
-            width = 72 - dstx
+        if dstx+width > _WIDTH:
+            width = _WIDTH - dstx
         if mirrorY:
             srcy = height - 1
             if dsty < 0:
@@ -858,13 +858,13 @@ class Grayscale:
                 srcy = 0 - dsty
                 height += dsty
                 dsty = 0
-        if dsty+height > 40:
-            height = 40 - dsty
+        if dsty+height > _HEIGHT:
+            height = _HEIGHT - dsty
 
         srco = (srcy >> 3) * stride + srcx
         srcm = 1 << (srcy & 7)
 
-        dsto = (dsty >> 3) * 72 + dstx
+        dsto = (dsty >> 3) * _WIDTH + dstx
         dstm = 1 << (dsty & 7)
         dstim = 255 - dstm
         if shading:
@@ -890,7 +890,7 @@ class Grayscale:
                 i -= 1
             dstm <<= 1
             if dstm & 0x100:
-                dsto += 72
+                dsto += _WIDTH
                 dstm = 1
                 dstim = 0xfe
             else:
