@@ -885,6 +885,8 @@ class Grayscale:
                             dBuf[dstco+_BUFF_SIZE] |= dstm
                         else:
                             dBuf[dstco+_BUFF_SIZE] &= dstim
+                    else:
+                        dBuf2[dstco] ^= dstm
                 srcco += sdx
                 dstco += 1
                 i -= 1
