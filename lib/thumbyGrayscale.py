@@ -366,11 +366,11 @@ class Grayscale:
                 spi_write(postFrameAdj[fn])
 
                 # Tasks that only happen after the last subframe
-                if (fn == 2):
+                if fn == 2:
                     # Check if there's a pending frame copy required.
                     # We only copy the paint framebuffers to the display
                     # framebuffers on the last frame to avoid screen-tearing.
-                    if (state[_ST_COPY_BUFFS] != 0):
+                    if state[_ST_COPY_BUFFS] != 0:
                         # By using using ptr32 vars we copy 4 bytes at a time
                         i = 0
                         j = _BUFF_INT_SIZE
@@ -385,7 +385,7 @@ class Grayscale:
                             j += 1
                         state[_ST_COPY_BUFFS] = 0
                     # Check if there's a pending contrast/brightness change
-                    if (state[_ST_CONTRAST]):
+                    if state[_ST_CONTRAST]:
                         # Copy in the new contrast adjustments
                         postFrameAdj[0][1] = postFrameAdjSrc[0]
                         postFrameAdj[1][1] = postFrameAdjSrc[1]
