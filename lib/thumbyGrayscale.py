@@ -104,9 +104,13 @@ class Grayscale:
 
         # Timing and display synchronisation commands.
         #
-        # DISCLAIMER: The following comments relating to the hardware
-        # may not be technically correct, and may instead only be
-        # effectively correct.
+        # NOTE: The method used to create reduced flicker greyscale using
+        # the SSD1306 uses certain assumptions about the internal behaviour
+        # of the controller. Even though the behaviour seems to back up
+        # those assumptions, it is possible that the assumptions are
+        # incorrect but the desired result is achieved anyway. To simplify
+        # things, the following comments are written as if the assumptions
+        # _are_ correct.
         #
         # We keep the display synchronised by resetting the row counter
         # before each frame and then outputting a frame of 57 rows.
