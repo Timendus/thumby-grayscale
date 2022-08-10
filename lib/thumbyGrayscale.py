@@ -1,7 +1,8 @@
 from array import array
 from machine import Pin, SPI, idle
 from os import stat
-from utime import sleep_ms, ticks_diff, ticks_ms, ticks_us, sleep_us
+import utime
+from utime import sleep_ms, ticks_diff, ticks_ms
 import _thread
 from ssd1306 import SSD1306_SPI
 from thumbyButton import buttonA, buttonB, buttonU, buttonD, buttonL, buttonR
@@ -318,6 +319,9 @@ class Grayscale:
     def _display_thread(self):
         ### GPU (Gray Processing Unit) thread function ###
         # cache various instance variables, buffers, and functions/methods
+        ticks_diff = utime.ticks_diff
+        ticks_us = utime.ticks_us
+        sleep_us = utime.sleep_us
         buffers = self._subframes
         postFrameAdj = self._postFrameAdj
         postFrameAdjSrc = ptr8(self._postFrameAdjSrc)
