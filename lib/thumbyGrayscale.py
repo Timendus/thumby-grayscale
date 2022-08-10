@@ -514,7 +514,8 @@ class Grayscale:
         oe = o + x2
         o += x
         strd = _WIDTH - width
-        c1, c2 = colour & 1, colour & 2
+        c1 = colour & 1
+        c2 = colour & 2
 
         yb = y & 7
         ybh = 8 - yb
@@ -562,7 +563,8 @@ class Grayscale:
 
     @micropython.viper
     def drawRectangle(self, x:int, y:int, width:int, height:int, colour:int):
-        x1, y1 = x + width - 1, y + height - 1
+        x1 = x + width - 1
+        y1 = y + height - 1
         dl = self.drawLine
         dl(x, y, x1, y, colour)
         dl(x, y1, x1, y1, colour)
@@ -623,7 +625,8 @@ class Grayscale:
         o = (y >> 3) * _WIDTH + x
         m = 1 << (y & 7)
         im = 255-m
-        c1, c2 = colour & 1, colour & 2
+        c1 = colour & 1
+        c2 = colour & 2
         ang = x0 != x1 and y0 != y1
 
         if dx > dy:
