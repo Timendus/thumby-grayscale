@@ -336,7 +336,8 @@ class Grayscale:
             # This is the main GPU loop.
             # We cycle through each of the 3 display subframe buffers,
             # sending the framebuffer data and various commands.
-            for fn in range(3):
+            fn = 0
+            while fn < 3:
                 # Send fn'th subframe
                 t0 = ticks_us()
                 # Send the pre-frame commands to 'park' the row counter
@@ -363,13 +364,17 @@ class Grayscale:
                     # framebuffers on the last frame to avoid screen-tearing.
                     if (state[_ST_COPY_BUFFS] != 0):
                         # By using using ptr32 vars we copy 4 bytes at a time
-                        for i in range(_BUFF_INT_SIZE):
+                        i = 0
+                        j = _BUFF_INT_SIZE
+                        while i < _BUFF_INT_SIZE:
                             v1 = dBuf[i]
-                            v2 = dBuf[i+_BUFF_INT_SIZE]
+                            v2 = dBuf[j]
                             # This remaps to the different buffer format.
                             b1[i] = v1 | v2 # white, lightgray and darkgray
                             b2[i] = v1 # white and lightgray
                             b3[i] = v1 & (v1^v2) # white only
+                            i += 1
+                            j += 1
                         state[_ST_COPY_BUFFS] = 0
                     # Check if there's a pending contrast/brightness change
                     if (state[_ST_CONTRAST]):
@@ -390,6 +395,8 @@ class Grayscale:
                 # Then we use sleep_us to busy wait for the precise time.
                 # TODO sleep_ms((_FRAME_TIME - int(ticks_diff(ticks_us(), t0))) >> 10)
                 sleep_us(_FRAME_TIME - int(ticks_diff(ticks_us(), t0)))
+
+                fn += 1
 
         # Announce the thread is done
         state[_ST_THREAD] = _THREAD_STOPPED
@@ -426,13 +433,15 @@ class Grayscale:
 
     @micropython.viper
     def fill(self, colour:int):
-        dBuf = ptr32(self.drawBuffer)
-        f = -1 if colour & 1 else 0
-        for i in range(_BUFF_INT_SIZE):
-            dBuf[i] = f # Black/White layer
-        f = -1 if colour & 2 else 0
-        for i in range(_BUFF_INT_SIZE, _BUFF_INT_SIZE*2):
-            dBuf[i] = f # Shading layer
+        dBuf1 = ptr32(self.drawBuffer)
+        dBuf2 = ptr32(self.shading)
+        f1 = -1 if colour & 1 else 0
+        f2 = -1 if colour & 2 else 0
+        i = 0
+        while i < _BUFF_INT_SIZE:
+            dBuf1[i] = f1 # Black/White layer
+            dBuf2[i] = f2 # Shading layer
+            i += 1
 
     @micropython.viper
     def brightness(self, c: int):
@@ -498,15 +507,14 @@ class Grayscale:
             y2 = _HEIGHT
             height = _HEIGHT - y
 
-        dBuff = ptr8(self.drawBuffer)
+        dBuff1 = ptr8(self.drawBuffer)
+        dBuff2 = ptr8(self.shading)
 
         o = (y >> 3) * _WIDTH
         oe = o + x2
         o += x
         strd = _WIDTH - width
-
-        v1 = 0xff if colour & 1 else 0
-        v2 = 0xff if colour & 2 else 0
+        c1, c2 = colour & 1, colour & 2
 
         yb = y & 7
         ybh = 8 - yb
@@ -516,22 +524,24 @@ class Grayscale:
             m = 0xff << yb
         im = 255-m
         while o < oe:
-            if colour & 1:
-                dBuff[o] |= m
+            if c1:
+                dBuff1[o] |= m
             else:
-                dBuff[o] &= im
-            if colour & 2:
-                dBuff[o+_BUFF_SIZE] |= m
+                dBuff1[o] &= im
+            if c2:
+                dBuff2[o] |= m
             else:
-                dBuff[o+_BUFF_SIZE] &= im
+                dBuff2[o] &= im
             o += 1
         height -= ybh
+        v1 = 0xff if c1 else 0
+        v2 = 0xff if c2 else 0
         while height >= 8:
             o += strd
             oe += _WIDTH
             while o < oe:
-                dBuff[o] = v1
-                dBuff[o+_BUFF_SIZE] = v2
+                dBuff1[o] = v1
+                dBuff2[o] = v2
                 o += 1
             height -= 8
         if height > 0:
@@ -540,23 +550,24 @@ class Grayscale:
             m = (1 << height) - 1
             im = 255-m
             while o < oe:
-                if colour & 1:
-                    dBuff[o] |= m
+                if c1:
+                    dBuff1[o] |= m
                 else:
-                    dBuff[o] &= im
-                if colour & 2:
-                    dBuff[o+_BUFF_SIZE] |= m
+                    dBuff1[o] &= im
+                if c2:
+                    dBuff2[o] |= m
                 else:
-                    dBuff[o+_BUFF_SIZE] &= im
+                    dBuff2[o] &= im
                 o += 1
 
     @micropython.viper
     def drawRectangle(self, x:int, y:int, width:int, height:int, colour:int):
         x1, y1 = x + width - 1, y + height - 1
-        self.drawLine(x, y, x1, y, colour)
-        self.drawLine(x, y1, x1, y1, colour)
-        self.drawLine(x, y, x, y1, colour)
-        self.drawLine(x1, y, x1, y1, colour)
+        dl = self.drawLine
+        dl(x, y, x1, y, colour)
+        dl(x, y1, x1, y1, colour)
+        dl(x, y, x, y1, colour)
+        dl(x1, y, x1, y1, colour)
 
     @micropython.viper
     def setPixel(self, x:int, y:int, colour:int):
@@ -605,54 +616,59 @@ class Grayscale:
             sx = -1
         x = x0
         y = y0
-        dBuff = ptr8(self.drawBuffer)
+
+        dBuf1 = ptr8(self.drawBuffer)
+        dBuf2 = ptr8(self.shading)
 
         o = (y >> 3) * _WIDTH + x
         m = 1 << (y & 7)
         im = 255-m
+        c1, c2 = colour & 1, colour & 2
+        ang = x0 != x1 and y0 != y1
 
+        err = dx >> 1
         if dx > dy:
-            err = dx >> 1
             while x != x1+1:
                 if 0 <= x < _WIDTH and 0 <= y < _HEIGHT:
-                    if colour & 1:
-                        dBuff[o] |= m
+                    if c1:
+                        dBuf1[o] |= m
                     else:
-                        dBuff[o] &= im
-                    if colour & 2:
-                        dBuff[o+_BUFF_SIZE] |= m
+                        dBuf1[o] &= im
+                    if c2:
+                        dBuf2[o] |= m
                     else:
-                        dBuff[o+_BUFF_SIZE] &= im
-                err -= dy
-                if err < 0:
-                    y += 1
-                    m <<= 1
-                    if m & 0x100:
-                        o += _WIDTH
-                        m = 1
-                        im = 0xfe
-                    else:
-                        im = 255-m
-                    err += dx
+                        dBuf2[o] &= im
+                if ang:
+                    err -= dy
+                    if err < 0:
+                        y += 1
+                        m <<= 1
+                        if m & 0x100:
+                            o += _WIDTH
+                            m = 1
+                            im = 0xfe
+                        else:
+                            im = 255-m
+                        err += dx
                 x += sx
                 o += sx
         else:
-            err = dy >> 1
             while y != y1+1:
                 if 0 <= x < _WIDTH and 0 <= y < _HEIGHT:
-                    if colour & 1:
-                        dBuff[o] |= m
+                    if c1:
+                        dBuf1[o] |= m
                     else:
-                        dBuff[o] &= im
-                    if colour & 2:
-                        dBuff[o+_BUFF_SIZE] |= m
+                        dBuf1[o] &= im
+                    if c2:
+                        dBuf2[o] |= m
                     else:
-                        dBuff[o+_BUFF_SIZE] &= im
-                err -= dx
-                if err < 0:
-                    x += sx
-                    o += sx
-                    err += dy
+                        dBuf2[o] &= im
+                if ang:
+                    err -= dx
+                    if err < 0:
+                        x += sx
+                        o += sx
+                        err += dy
                 y += 1
                 m <<= 1
                 if m & 0x100:
@@ -687,7 +703,7 @@ class Grayscale:
         ol = ou + _WIDTH
         shu = y & 7
         shl = 8 - shu
-        for c in stringToPrint:
+        for c in memoryview(stringToPrint):
             if isinstance(c, str):
                 co = int(ord(c)) - 0x20
             else:
@@ -722,12 +738,10 @@ class Grayscale:
 
     @micropython.viper
     def blitSHD(self, sprtptr:ptr8, src2:ptr8, x:int, y:int, width:int, height:int, key:int, mirrorX:int, mirrorY:int):
-        shading = int(src2)
         if x+width < 0 or x >= _WIDTH:
             return
         if y+height < 0 or y >= _HEIGHT:
             return
-        dBuff = ptr8(self.drawBuffer)
 
         stride = width
 
@@ -769,23 +783,28 @@ class Grayscale:
         dstm = 1 << (dsty & 7)
         dstim = 255 - dstm
 
+        dBuf1 = ptr8(self.drawBuffer)
+        dBuf2 = ptr8(self.shading)
+        shading = 2 if int(src2) else 0
         while height != 0:
             srcco = srco
             dstco = dsto
             i = width
             while i != 0:
-                v = 1 if sprtptr[srcco] & srcm else 0
-                if shading and (src2[srcco] & srcm):
-                    v |= 2
+                v = 0
+                if sprtptr[srcco] & srcm:
+                    v = 1
+                if src2[srcco] & srcm:
+                    v |= shading
                 if (key == -1) or (v != key):
                     if v & 1:
-                        dBuff[dstco] |= dstm
+                        dBuf1[dstco] |= dstm
                     else:
-                        dBuff[dstco] &= dstim
+                        dBuf1[dstco] &= dstim
                     if v & 2:
-                        dBuff[dstco+_BUFF_SIZE] |= dstm
+                        dBuf2[dstco] |= dstm
                     else:
-                        dBuff[dstco+_BUFF_SIZE] &= dstim
+                        dBuf2[dstco] &= dstim
                 srcco += sdx
                 dstco += 1
                 i -= 1
@@ -810,23 +829,19 @@ class Grayscale:
 
     @micropython.native
     def drawSprite(self, s):
-        shading = 0
-        if type(s) is ShadedSprite:
-            shading = s.bitmapSHD
-        self.blitSHD(s.bitmap, shading, s.x, s.y, s.width, s.height, s.key, s.mirrorX, s.mirrorY)
+        self.blitSHD(s.bitmap, s.bitmapSHD if isinstance(s, ShadedSprite) else 0,
+            s.x, s.y, s.width, s.height, s.key, s.mirrorX, s.mirrorY)
 
     @micropython.viper
     def blitWithMask(self, sprtptr:ptr8, x:int, y:int, width:int, height:int, key:int, mirrorX:int, mirrorY:int, mask:ptr8):
-        self.blitSHD(sprtptr, 0, x, y, width, height, key, mirrorX, mirrorY, mask)
+        self.blitWithMaskSHD(sprtptr, 0, x, y, width, height, key, mirrorX, mirrorY, mask)
 
     @micropython.viper
     def blitWithMaskSHD(self, sprtptr:ptr8, src2:ptr8, x:int, y:int, width:int, height:int, key:int, mirrorX:int, mirrorY:int, mask:ptr8):
-        shading = int(src2)
         if x+width < 0 or x >= _WIDTH:
             return
         if y+height < 0 or y >= _HEIGHT:
             return
-        dBuf = ptr8(self.drawBuffer)
 
         stride = width
 
@@ -867,9 +882,10 @@ class Grayscale:
         dsto = (dsty >> 3) * _WIDTH + dstx
         dstm = 1 << (dsty & 7)
         dstim = 255 - dstm
-        if shading:
-            src2 = ptr8(shading)
 
+        dBuf1 = ptr8(self.drawBuffer)
+        dBuf2 = ptr8(self.shading)
+        shading = int(src2)
         while height != 0:
             srcco = srco
             dstco = dsto
@@ -877,14 +893,14 @@ class Grayscale:
             while i != 0:
                 if (mask[srcco] & srcm) == 0:
                     if sprtptr[srcco] & srcm:
-                        dBuf[dstco] |= dstm
+                        dBuf1[dstco] |= dstm
                     else:
-                        dBuf[dstco] &= dstim
+                        dBuf1[dstco] &= dstim
                     if shading:
                         if src2[srcco] & srcm:
-                            dBuf[dstco+_BUFF_SIZE] |= dstm
+                            dBuf2[dstco] |= dstm
                         else:
-                            dBuf[dstco+_BUFF_SIZE] &= dstim
+                            dBuf2[dstco] &= dstim
                     else:
                         dBuf2[dstco] ^= dstm
                 srcco += sdx
@@ -911,10 +927,9 @@ class Grayscale:
 
     @micropython.native
     def drawSpriteWithMask(self, s, m):
-        shading = 0
-        if type(s) is ShadedSprite:
-            shading = s.bitmapSHD
-        self.blitWithMaskSHD(s.bitmap, shading, s.x, s.y, s.width, s.height, s.key, s.mirrorX, s.mirrorY, m.bitmap)
+        self.blitWithMaskSHD(
+            s.bitmap, s.bitmapSHD if isinstance(s, ShadedSprite) else 0,
+            s.x, s.y, s.width, s.height, s.key, s.mirrorX, s.mirrorY, m.bitmap)
 
 
 class ShadedSprite(_Sprite):
