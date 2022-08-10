@@ -7,26 +7,26 @@ freq(125000000)
 # Results (example full run):
 '''
 core0 GPUv2.1
-Draw Angled Line Test: 443639
-Draw Straight Line Test: 669122
-Hello World Chart Test: 1543745
-Rectangle Chart Test: 1876413
-Filled Rectangle Chart Test: 880328
-Hello World Test: 670881
-Cat Sprite Test (nofill): 1724246
-White Fill Test: 1104001
-Light Gray Fill Test: 1103964
+Draw Angled Line Test: 443489
+Draw Straight Line Test: 668919
+Hello World Chart Test: 1481534
+Rectangle Chart Test: 1145095
+Filled Rectangle Chart Test: 879935
+Hello World Test: 609117
+Cat Sprite Test (nofill): 1693210
+White Fill Test: 1103481
+Light Gray Fill Test: 1103568
 
 core0 GPUv2.0
-Draw Angled Line Test: 446384
-Draw Straight Line Test: 340052
-Hello World Chart Test: 2338940
-Rectangle Chart Test: 1149257
-Filled Rectangle Chart Test: 907525
-Hello World Test: 1421068
-Cat Sprite Test (nofill): 1633822
-White Fill Test: 1137705
-Light Gray Fill Test: 1137248
+Draw Angled Line Test: 446506
+Draw Straight Line Test: 340023
+Hello World Chart Test: 2338556
+Rectangle Chart Test: 1149255
+Filled Rectangle Chart Test: 907452
+Hello World Test: 1420947
+Cat Sprite Test (nofill): 1633474
+White Fill Test: 1137747
+Light Gray Fill Test: 1137319
 '''
 
 # TODO Draw line test

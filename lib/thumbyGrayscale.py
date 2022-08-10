@@ -571,13 +571,11 @@ class Grayscale:
 
     @micropython.viper
     def drawRectangle(self, x:int, y:int, width:int, height:int, colour:int):
-        x1 = x + width - 1
-        y1 = y + height - 1
-        dl = self.drawLine
-        dl(x, y, x1, y, colour)
-        dl(x, y1, x1, y1, colour)
-        dl(x, y, x, y1, colour)
-        dl(x1, y, x1, y1, colour)
+        dfr = self.drawFilledRectangle
+        dfr(x, y, width, 1, colour) # Top
+        dfr(x, y+height-1, width, 1, colour) # Bottom
+        dfr(x, y, 1, height, colour) # Left
+        dfr(x+width-1, y, 1, height, colour) # Right
 
     @micropython.viper
     def setPixel(self, x:int, y:int, colour:int):
