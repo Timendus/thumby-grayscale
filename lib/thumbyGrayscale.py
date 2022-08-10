@@ -23,8 +23,8 @@ except ImportError:
 # calculations shown provide the value in seconds, which can be
 # multiplied by 1e6 to provide a microsecond value.
 # Both values are in microseconds.
-_PRE_FRAME_TIME = const(785) # 8 rows: (8*(1+1+50)) / 530e3 seconds
-_FRAME_TIME = const(4709) # 48 rows: (49*(1+1+50)) / 530e3 seconds
+_PRE_FRAME_TIME_US = const(785) # 8 rows: (8*(1+1+50)) / 530e3 seconds
+_FRAME_TIME_US = const(4709) # 48 rows: (49*(1+1+50)) / 530e3 seconds
 
 # Thread state variables for managing the Grayscale Thread.
 _THREAD_STOPPED = const(0)
@@ -353,7 +353,7 @@ class Grayscale:
                 # Send the first instance of the contrast adjust command
                 spi_write(postFrameAdj[fn])
                 # Wait for the pre-frame time to complete
-                sleep_us(_PRE_FRAME_TIME - int(ticks_diff(ticks_us(), t0)))
+                sleep_us(_PRE_FRAME_TIME_US - int(ticks_diff(ticks_us(), t0)))
                 t0 = ticks_us()
                 # Send the post-frame commands to display the frame
                 spi_write(postFrameCmds)
@@ -397,8 +397,8 @@ class Grayscale:
                 # We use sleep_ms first to allow idle loop usage,
                 # with >>10 for a fast /1000 approximation.
                 # Then we use sleep_us to busy wait for the precise time.
-                # TODO sleep_ms((_FRAME_TIME - int(ticks_diff(ticks_us(), t0))) >> 10)
-                sleep_us(_FRAME_TIME - int(ticks_diff(ticks_us(), t0)))
+                # TODO sleep_ms((_FRAME_TIME_US - int(ticks_diff(ticks_us(), t0))) >> 10)
+                sleep_us(_FRAME_TIME_US - int(ticks_diff(ticks_us(), t0)))
 
                 fn += 1
 
