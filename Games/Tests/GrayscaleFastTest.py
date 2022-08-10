@@ -19,6 +19,7 @@ freq(200000000)
 # Import dependencies
 from machine import reset
 import thumby
+from thumbySprite import Sprite
 from time import ticks_ms, sleep_ms
 from utime import ticks_us, sleep_us, ticks_diff
 import thumbyGrayscale as grayscale
@@ -71,6 +72,29 @@ gs.drawText("world!", 18, 19, gs.DARKGRAY)
 gs.update()
 sleep_ms(1000)
 
+thumby.display = gs
+gs.setFPS(60)
+c = 1
+while(thumby.buttonA.pressed() == False and thumby.buttonB.pressed() == False and c<100):
+    if(ticks_ms() % 1000 < 500):
+        thumby.display.drawFilledRectangle(0, 32, 72, 8, 0)
+        thumby.display.drawText("Press A/B", 9, 32, 1)
+    else:
+        thumby.display.drawFilledRectangle(0, 32, 72, 8, 1)
+        thumby.display.drawText("Press A/B", 9, 32, 0)
+    thumby.display.update()
+    c += 1
+    pass
+
+gs.drawFilledRectangle(0, 0, 72, 40, gs.WHITE)
+gs.drawFilledRectangle(0, 0, 62, 30, gs.LIGHTGRAY)
+gs.drawFilledRectangle(0, 0, 52, 20, gs.DARKGRAY)
+gs.drawFilledRectangle(0, 0, 42, 10, gs.BLACK)
+gs.drawText("Hello", 2, 31, gs.LIGHTGRAY)
+gs.drawText("world!", 37, 31, gs.DARKGRAY)
+gs.update()
+sleep_ms(1000)
+
 # Bouncing cat demo
 
 cat = legacy_sprite(grayscale.ShadedSprite(
@@ -85,30 +109,18 @@ cat = legacy_sprite(grayscale.ShadedSprite(
     ]),
     30, 15         # Position
 ))
-catMask = grayscale.ShadedSprite(
+catMask = Sprite(
     12, 9,         # Dimensions
-    bytearray([0,7,1,0,1,1,1,1,0,1,7,223,
-           1,1,0,0,0,0,0,0,0,0,1,1]),
     bytearray([0,7,1,0,1,1,1,1,0,1,7,223,
            1,1,0,0,0,0,0,0,0,0,1,1]),
     30, 15         # Position
 )
-
-thumby.display = gs
-
-gs.setFPS(60)
-
-c = 1
-while(thumby.buttonA.pressed() == False and thumby.buttonB.pressed() == False and c<100):
-    if(ticks_ms() % 1000 < 500):
-        thumby.display.drawFilledRectangle(0, 32, 72, 8, 0)
-        thumby.display.drawText("Press A/B", 9, 32, 1)
-    else:
-        thumby.display.drawFilledRectangle(0, 32, 72, 8, 1)
-        thumby.display.drawText("Press A/B", 9, 32, 0)
-    thumby.display.update()
-    c += 1
-    pass
+catBW = Sprite(
+    12, 9,         # Dimensions
+    bytearray([175,7,169,254,237,255,191,157,190,233,255,175,
+                1,1,0,1,1,1,1,1,1,1,1,1]),
+    30, 15         # Position
+)
 
 c = dx = dy = 1
 while c < 200:
@@ -121,9 +133,20 @@ while c < 200:
     if cat.y == 0 or cat.y == 31:
         dy = -1 * dy
     gs.update()
-    #sleep_ms(50)
     c += 1
 
+c = dx = dy = 1
+while c < 200:
+    gs.fill(gs.DARKGRAY)
+    gs.drawSpriteWithMask(catBW, catMask)
+    catBW.x += dx
+    catBW.y += dy
+    if catBW.x == 0 or catBW.x == 60:
+        dx = -1 * dx
+    if catBW.y == 0 or catBW.y == 31:
+        dy = -1 * dy
+    gs.update()
+    c += 1
 
 # Full screen images demo
 girlSprite = legacy_sprite(grayscale.ShadedSprite(72, 40, bytearray([
