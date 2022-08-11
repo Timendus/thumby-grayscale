@@ -480,8 +480,8 @@ class Grayscale:
         self.show()
         if self.frameRate > 0:
             frameTimeMs = 1000 // self.frameRate
-            last = self.lastUpdateEnd
-            frameTimeRemaining = frameTimeMs - ticks_diff(ticks_ms(), last)
+            lastUpdateEnd = self.lastUpdateEnd
+            frameTimeRemaining = frameTimeMs - ticks_diff(ticks_ms(), lastUpdateEnd)
             while frameTimeRemaining > 1:
                 buttonA.update()
                 buttonB.update()
@@ -490,9 +490,9 @@ class Grayscale:
                 buttonL.update()
                 buttonR.update()
                 sleep_ms(1)
-                frameTimeRemaining = frameTimeMs - ticks_diff(ticks_ms(), last)
+                frameTimeRemaining = frameTimeMs - ticks_diff(ticks_ms(), lastUpdateEnd)
             while frameTimeRemaining > 0:
-                frameTimeRemaining = frameTimeMs - ticks_diff(ticks_ms(), last)
+                frameTimeRemaining = frameTimeMs - ticks_diff(ticks_ms(), lastUpdateEnd)
         self.lastUpdateEnd = ticks_ms()
 
     @micropython.viper
