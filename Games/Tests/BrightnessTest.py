@@ -5,11 +5,11 @@
 # A: switch between brightness levels.
 # Down: B/W
 # Up: Grayscale
-# Left: B/W with screeen reset
+# Left: B/W
 # Right: Quit
 
 from machine import freq
-freq(125000000)
+freq(200000000)
 
 # Fix import path so it finds the grayscale library
 import sys
@@ -42,7 +42,7 @@ while(thumby.buttonR.pressed() == False):
     if thumby.buttonL.justPressed():
         gs.stopGPU()
     if thumby.buttonU.justPressed():
-        gs.stopGPU(1)
+        gs.stopGPU()
     if thumby.buttonD.justPressed():
         gs.startGPU()
     if thumby.buttonA.justPressed():

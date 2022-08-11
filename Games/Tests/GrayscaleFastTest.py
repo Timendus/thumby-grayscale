@@ -24,11 +24,13 @@ from time import ticks_ms, sleep_ms
 from utime import ticks_us, sleep_us, ticks_diff
 import thumbyGrayscale as grayscale
 
-
 # Initialization
 gs = grayscale.display
+
+
 gs.poweroff()
 gs.poweron()
+gs.setFPS(60)
 
 # Test suite
 assert gs.width == 72, "height"
@@ -78,7 +80,6 @@ gs.update()
 sleep_ms(1000)
 
 thumby.display = gs
-gs.setFPS(60)
 c = 1
 while(thumby.buttonA.pressed() == False and thumby.buttonB.pressed() == False and c<100):
     if(ticks_ms() % 1000 < 500):
@@ -139,6 +140,10 @@ while c < 200:
         dy = -dy
     gs.update()
     c += 1
+    if c%60==0:
+        gs.startGPU()
+    elif c%60==30:
+        gs.stopGPU()
 
 c = dx = dy = 1
 while c < 200:
@@ -186,7 +191,7 @@ gs.startGPU()
 gs.drawSprite(girlSprite)
 gs.update()
 sleep_ms(1000)
-gs.stopGPU(1)
+gs.stopGPU()
 gs.drawSprite(girlSprite)
 gs.update()
 sleep_ms(1000)
@@ -196,7 +201,7 @@ gs.drawSprite(parrotSprite)
 gs.update()
 sleep_ms(1000)
 
-gs.stopGPU(1)
+gs.stopGPU()
 sleep_ms(1000)
 
 gs.startGPU()
