@@ -52,6 +52,8 @@ def legacy_sprite(spr):
 # Drawing primitives demo
 
 gs.fill(gs.DARKGRAY)
+gs.drawLine(14, 3, 58, 3, gs.LIGHTGRAY)
+gs.drawLine(10, 7, 10, 32, gs.LIGHTGRAY)
 gs.drawFilledRectangle(16, 9, 40, 21, gs.LIGHTGRAY)
 gs.drawRectangle(14, 7, 44, 25, gs.LIGHTGRAY)
 gs.drawLine(14, 32, 55, 39, gs.LIGHTGRAY)
@@ -64,6 +66,8 @@ sleep_ms(500)
 gs.startGPU()
 
 gs.fill(gs.DARKGRAY)
+gs.drawLine(14, 3, 58, 3, gs.LIGHTGRAY)
+gs.drawLine(10, 7, 10, 32, gs.LIGHTGRAY)
 gs.drawFilledRectangle(16, 9, 40, 21, gs.LIGHTGRAY)
 gs.drawRectangle(14, 7, 44, 25, gs.LIGHTGRAY)
 gs.drawLine(14, 32, 55, 39, gs.LIGHTGRAY)

@@ -506,12 +506,10 @@ class Grayscale:
             height += y
             y = 0
         x2 = x + width
-        y2 = y + height
         if x2 > _WIDTH:
             x2 = _WIDTH
             width = _WIDTH - x
-        if y2 > _HEIGHT:
-            y2 = _HEIGHT
+        if y + height > _HEIGHT:
             height = _HEIGHT - y
 
         dBuff1 = ptr8(self.drawBuffer)
@@ -609,6 +607,12 @@ class Grayscale:
 
     @micropython.viper
     def drawLine(self, x0:int, y0:int, x1:int, y1:int, colour:int):
+        if (x0==x1):
+            self.drawFilledRectangle(x0, y0, 1, y1-y0, colour)
+            return
+        elif (y0==y1):
+            self.drawFilledRectangle(x0, y0, x1-x0, 1, colour)
+            return
         dx = x1 - x0
         dy = y1 - y0
         sx = 1
@@ -632,7 +636,6 @@ class Grayscale:
         im = 255-m
         c1 = colour & 1
         c2 = colour & 2
-        ang = x0 != x1 and y0 != y1
 
         if dx > dy:
             err = dx >> 1
@@ -646,18 +649,17 @@ class Grayscale:
                         dBuf2[o] |= m
                     else:
                         dBuf2[o] &= im
-                if ang:
-                    err -= dy
-                    if err < 0:
-                        y += 1
-                        m <<= 1
-                        if m & 0x100:
-                            o += _WIDTH
-                            m = 1
-                            im = 0xfe
-                        else:
-                            im = 255-m
-                        err += dx
+                err -= dy
+                if err < 0:
+                    y += 1
+                    m <<= 1
+                    if m & 0x100:
+                        o += _WIDTH
+                        m = 1
+                        im = 0xfe
+                    else:
+                        im = 255-m
+                    err += dx
                 x += sx
                 o += sx
         else:
@@ -672,12 +674,11 @@ class Grayscale:
                         dBuf2[o] |= m
                     else:
                         dBuf2[o] &= im
-                if ang:
-                    err -= dx
-                    if err < 0:
-                        x += sx
-                        o += sx
-                        err += dy
+                err -= dx
+                if err < 0:
+                    x += sx
+                    o += sx
+                    err += dy
                 y += 1
                 m <<= 1
                 if m & 0x100:
