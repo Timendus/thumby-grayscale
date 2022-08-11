@@ -276,6 +276,8 @@ class Grayscale:
 
         # GPU is active - ferry the commans to the thread
         pendingCmds = self._pendingCmds
+        # We can't just break up the longer list of commands automatically,
+        # as we might end up separating a command and its parameter(s).
         assert len(cmd) <= len(pendingCmds), "Display commands too long"
         # Fill the rest of the bytearray with display controller NOPs
         cmd += bytearray([0x3e]*(len(pendingCmds)-len(cmd)))
