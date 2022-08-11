@@ -234,8 +234,9 @@ class Grayscale:
             0xad,0x30, 0xaf]))
         self._dc(1)
         # clear the entire GDRAM
+        zero32 = bytearray(32)
         for _ in range(32):
-            self._spi.write(bytearray(32))
+            self._spi.write(zero32)
         self._dc(0)
         # set the GDRAM window
         # 0x21,28,99    Set column start (28) and end (99) addresses
