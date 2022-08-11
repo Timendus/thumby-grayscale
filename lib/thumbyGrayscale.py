@@ -144,9 +144,9 @@ class Grayscale:
         # 0xa8,57-1 Set multiplex ratio to 57
         self._postFrameCmds = bytearray([0xd3,_HEIGHT+(64-57), 0xa8,57-1])
 
-        # It's safer to avoid using regular variables for shared thread data.
+        # It's better to avoid using regular variables for thread sychronisation.
         # Instead, elements of an array/bytearray should be used.
-        # We're also using a uint32 array here, as thsis more likely to ensure
+        # We're also using a uint32 array here, as this more likely to ensure
         # the atomicity of any element accesses.
         # [thread_state, buff_copy_gate, pending_cmd_gate, constrast_change]
         self._state = array('I', [_THREAD_STOPPED,0,0,0])
@@ -175,9 +175,6 @@ class Grayscale:
     def __enter__(self):
         return self
     def __exit__(self, type, value, traceback):
-        self.stopGPU()
-    # Garbage collect the GPU thread properly
-    def __del__(self):
         self.stopGPU()
 
 
@@ -214,23 +211,23 @@ class Grayscale:
         self._dc(0)
         # Usual initialisation, except with shortest pre-charge periods
         # and highest clock frequency:
-        # 0xae      Display Off
-        # 0x20,0x00 Set horizontal addressing mode
-        # 0x40      Set display start line to 0
-        # 0xa1      Set segment remap mode 1
-        # 0xa8,63   Set multiplex ratio to 64 (will be changed later)
-        # 0xc8      Set COM output scan direction 1
-        # 0xd3,54   Set display offset to 0 (will be changed later)
-        # 0xda,0x12 Set COM pins hw config: alt config, disable left/right remap
-        # 0xd5,0xf0 Set clk div ratio = 1, and osc freq = ~370kHz
-        # 0xd9,0x11 Set pre-charge periods: phase 1 = 1 , phase 2 = 1
-        # 0xdb,0x20 Set Vcomh deselect level = 0.77 x Vcc
-        # 0x81,0x7f Set Bank0 contrast to 127 (will be changed later)
-        # 0xa4      Do not enable entire display (i.e. use GDRAM)
-        # 0xa6      Normal (not inverse) display
-        # 0x8d,0x14 Charge bump setting: enable charge pump during display on
-        # 0xad,0x30 Select internal 30uA Iref (max Iseg=240uA) during display on
-        # 0xf       Set display on
+        # 0xae          Display Off
+        # 0x20,0x00     Set horizontal addressing mode
+        # 0x40          Set display start line to 0
+        # 0xa1          Set segment remap mode 1
+        # 0xa8,63       Set multiplex ratio to 64 (will be changed later)
+        # 0xc8          Set COM output scan direction 1
+        # 0xd3,54       Set display offset to 0 (will be changed later)
+        # 0xda,0x12     Set COM pins hw config: alt config, disable left/right remap
+        # 0xd5,0xf0     Set clk div ratio = 1, and osc freq = ~370kHz
+        # 0xd9,0x11     Set pre-charge periods: phase 1 = 1 , phase 2 = 1
+        # 0xdb,0x20     Set Vcomh deselect level = 0.77 x Vcc
+        # 0x81,0x7f     Set Bank0 contrast to 127 (will be changed later)
+        # 0xa4          Do not enable entire display (i.e. use GDRAM)
+        # 0xa6          Normal (not inverse) display
+        # 0x8d,0x14     Charge bump setting: enable charge pump during display on
+        # 0xad,0x30     Select internal 30uA Iref (max Iseg=240uA) during display on
+        # 0xf           Set display on
         self._spi.write(bytearray([
             0xae, 0x20,0x00, 0x40, 0xa1, 0xa8,63, 0xc8, 0xd3,0, 0xda,0x12,
             0xd5,0xf0, 0xd9,0x11, 0xdb,0x20, 0x81,0x7f, 0xa4, 0xa6, 0x8d,0x14,
