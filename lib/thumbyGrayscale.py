@@ -152,7 +152,6 @@ class Grayscale:
         self._state = array('I', [_THREAD_STOPPED,0,0,0])
         # Buffer to funnel cmds to the thread
         self._pendingCmds = bytearray([0] * 8)
-        # Set font, also supports: self.setFont('lib/font8x8.bin', 8, 8, 0)
         self.setFont('lib/font5x7.bin', 5, 7, 1)
 
         # Brightness modulation.
