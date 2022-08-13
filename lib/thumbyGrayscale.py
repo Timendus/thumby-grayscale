@@ -995,9 +995,9 @@ class ShadedSprite(_Sprite):
 
     @micropython.native
     def setFrame(self, frame):
+        prevFrame = self.currentFrame
         super().setFrame(frame)
-        if(frame >= 0 and (self.currentFrame is not frame % (self.frameCount))):
-            self.currentFrame = frame % (self.frameCount)
+        if(prevFrame != self.currentFrame):
             offset=self.bitmapByteCount*self.currentFrame
             if type(self.bitmapSourceSHD)==str:
                 self.fileSHD.seek(offset)
