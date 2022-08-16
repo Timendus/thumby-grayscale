@@ -1,6 +1,7 @@
 from array import array
 from machine import Pin, SPI, idle
 from os import stat
+from math import sqrt, floor
 import utime
 from utime import sleep_ms, ticks_diff, ticks_ms
 import _thread
@@ -456,10 +457,17 @@ class Grayscale:
         state = ptr32(self._state)
         postFrameAdj = self._postFrameAdj
         postFrameAdjSrc = ptr8(self._postFrameAdjSrc)
-        # Shift the value to provide 3 different subframe levels for the GPU
-        postFrameAdjSrc[0] = c >> 5
-        postFrameAdjSrc[1] = c >> 1
-        postFrameAdjSrc[2] = (c << 1) + 1
+
+        # Provide 3 different subframe levels for the GPU
+        # Low (0): 0, 5, 15
+        # Mid (28): 4, 42, 173
+        # High (127):  9, 84, 255
+        c = int(floor(sqrt(c<<17)))
+        postFrameAdjSrc[0] = (c*10>>12)
+        postFrameAdjSrc[1] = (c*80>>12)+5
+        c3 = (c*340>>12)+15
+        postFrameAdjSrc[2] = c3 if c3 < 255 else 255
+
         # Apply to display, GPU, and emulator
         if state[_ST_THREAD] == _THREAD_RUNNING:
             state[_ST_CONTRAST] = 1
