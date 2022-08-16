@@ -494,9 +494,9 @@ class Grayscale:
         # Mid (28): 4, 42, 173
         # High (127):  9, 84, 255
         c = int(floor(sqrt(c<<17)))
-        postFrameAdjSrc[0] = (c*10>>12)
-        postFrameAdjSrc[1] = (c*80>>12)+5
-        c3 = (c*340>>12)+15
+        postFrameAdjSrc[0] = (c*30>>12)+6
+        postFrameAdjSrc[1] = (c*72>>12)+14
+        c3 = (c*340>>12)+20
         postFrameAdjSrc[2] = c3 if c3 < 255 else 255
 
         # Apply to display, GPU, and emulator
