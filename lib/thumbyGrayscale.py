@@ -100,8 +100,6 @@ class Grayscale:
         self._res = Pin(20)
         self._res.init(Pin.OUT, value=1)
         self._spi.init(baudrate=100 * 1000 * 1000, polarity=0, phase=0)
-        self._initEmuScreen()
-        self.init_display()
 
         # Display driver subframe buffers.
         # These essentially combine into one framebuffer,
@@ -207,6 +205,7 @@ class Grayscale:
         self._dc(0)
 
         if not self._display_initialised:
+            self._initEmuScreen()
             self._display_initialised = 1
             self.reset()
             self._cs(0)
