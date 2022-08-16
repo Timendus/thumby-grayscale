@@ -26,6 +26,9 @@ gs = grayscale.display
 gs.startGPU()
 gs.setFPS(60)
 
+inv = 0
+gs.invert(inv)
+
 # Display color chart
 gs.drawFilledRectangle(0, 0, 72, 40, gs.WHITE)
 gs.drawFilledRectangle(0, 0, 62, 30, gs.LIGHTGRAY)
@@ -40,7 +43,8 @@ contrastCycle = -1
 contrast = 127
 while(thumby.buttonR.pressed() == False):
     if thumby.buttonL.justPressed():
-        gs.stopGPU()
+        inv = 0 if inv else 1
+        gs.display.invert(inv)
     if thumby.buttonU.justPressed():
         gs.stopGPU()
     if thumby.buttonD.justPressed():

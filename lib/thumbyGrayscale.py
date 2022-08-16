@@ -37,6 +37,7 @@ _ST_THREAD = const(0)
 _ST_COPY_BUFFS = const(1)
 _ST_PENDING_CMD = const(2)
 _ST_CONTRAST = const(3)
+_ST_INVERT = const(4)
 
 # Screen display size constants
 _WIDTH = const(72)
@@ -88,8 +89,8 @@ class Grayscale:
         # Instead, elements of an array/bytearray should be used.
         # We're also using a uint32 array here, as this more likely to ensure
         # the atomicity of any element accesses.
-        # [thread_state, buff_copy_gate, pending_cmd_gate, constrast_change]
-        self._state = array('I', [_THREAD_STOPPED,0,0,0])
+        # [thread_state, buff_copy_gate, pending_cmd_gate, constrast_change, inverted]
+        self._state = array('I', [_THREAD_STOPPED,0,0,0,0])
         # Buffer to funnel cmds to the thread
         self._pendingCmds = bytearray([0] * 8)
 
@@ -187,6 +188,7 @@ class Grayscale:
         # Disable device controller functions
         def _disabled(*arg, **kwdarg):
             pass
+        self.invert = _disabled
         self.reset = _disabled
         self.poweron = _disabled
         self.poweroff = _disabled
@@ -256,8 +258,11 @@ class Grayscale:
             sleep_us(_FRAME_TIME_US)
             # 0xa8,39       Set multiplex ratio to height (releasing updates)
             self._spi.write(bytearray([0xa8,_HEIGHT-1]))
+            if self._state[_ST_INVERT]:
+                self.write_cmd(0xa6 | 1) # Resume device color inversion
             return
 
+        self.write_cmd(0xa6) # Stop device color inversion for GPU
         # Initialise the display for grayscale timings
         # Usual initialisation, except with shortest pre-charge periods
         # multiplex of 0, and highest clock frequency:
@@ -326,6 +331,14 @@ class Grayscale:
     def poweron(self):
         self.write_cmd(0xaf)
 
+    @micropython.viper
+    def invert(self, invert: int):
+        state = ptr32(self._state)
+        invert = invert & 1
+        state[_ST_INVERT] = invert # GPU color inversion
+        if state[_ST_THREAD] != _THREAD_RUNNING:
+            self.write_cmd(0xa6 | invert) # Device controller inversion
+
     def startGPU(self):
         ### Activate grayscale in the display (Gray Processing Unit).
         # Takes over the second core.
@@ -376,6 +389,7 @@ class Grayscale:
             # This is the main GPU loop.
             # We cycle through each of the 3 display subframe buffers,
             # sending the framebuffer data and various commands.
+            invert = state[_ST_INVERT]
             fn = 0
             while fn < 3:
                 # Send fn'th subframe
@@ -409,6 +423,8 @@ class Grayscale:
                         while i < _BUFF_INT_SIZE:
                             v1 = dBuf[i]
                             v2 = dBuf[j]
+                            if invert:
+                                v1 = -1^v1
                             # This remaps to the different buffer format.
                             b1[i] = v1 | v2 # white, lightgray and darkgray
                             b2[i] = v1 # white and lightgray
