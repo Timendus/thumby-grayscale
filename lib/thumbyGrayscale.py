@@ -171,6 +171,7 @@ class Grayscale:
 
     # Allow use of 'with' for manaing the GPU state
     def __enter__(self):
+        self.startGPU()
         return self
     def __exit__(self, type, value, traceback):
         self.stopGPU()
