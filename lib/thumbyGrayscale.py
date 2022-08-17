@@ -164,7 +164,7 @@ class Grayscale:
                 _, _, conf = fh.read().partition("brightness,")
                 b = int(conf.split(',')[0])
                 # Set to the relevant brightness level
-                self._brightness = 0 if b==0 else 56 if b==1 else 127
+                self._brightness = 0 if b==0 else 28 if b==1 else 127
         except (OSError, ValueError):
             pass
         self.brightness(self._brightness)
