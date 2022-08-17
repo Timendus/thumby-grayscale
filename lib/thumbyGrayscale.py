@@ -95,6 +95,7 @@ class Grayscale:
         self._pendingCmds = bytearray([0] * 8)
 
         # Display device configuration
+        self._initEmuScreen()
         self._spi = SPI(0, sck=Pin(18), mosi=Pin(19))
         self._dc = Pin(17)
         self._cs = Pin(16)
@@ -185,6 +186,8 @@ class Grayscale:
         # Register draw buffer with emulator
         Pin(2, Pin.OUT) # Ready display handshake pin
         emulator.screen_breakpoint(ptr16(self.drawBuffer))
+        self._clearEmuFunctions()
+    def _clearEmuFunctions(self):
         # Disable device controller functions
         def _disabled(*arg, **kwdarg):
             pass
@@ -207,7 +210,6 @@ class Grayscale:
         self._dc(0)
 
         if not self._display_initialised:
-            self._initEmuScreen()
             self._display_initialised = 1
             self.reset()
             self._cs(0)
@@ -509,10 +511,10 @@ class Grayscale:
         # Low (0): 0, 5, 15
         # Mid (28): 4, 42, 173
         # High (127):  9, 84, 255
-        c = int(floor(sqrt(c<<17)))
-        postFrameAdjSrc[0] = (c*30>>12)+6
-        postFrameAdjSrc[1] = (c*72>>12)+14
-        c3 = (c*340>>12)+20
+        cc = int(floor(sqrt(c<<17)))
+        postFrameAdjSrc[0] = (cc*30>>12)+6
+        postFrameAdjSrc[1] = (cc*72>>12)+14
+        c3 = (cc*340>>12)+20
         postFrameAdjSrc[2] = c3 if c3 < 255 else 255
 
         # Apply to display, GPU, and emulator
