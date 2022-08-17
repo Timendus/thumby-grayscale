@@ -252,14 +252,15 @@ class Grayscale:
         if self._state[_ST_THREAD] == _THREAD_STOPPED:
             # Reinitialise to the normal configuration. Copied from ssd1306.py
             # 0xa8,0        Set multiplex ratio to 0 (pausing updates)
-            # 0xd3,0        Set display offset to 0
+            # 0xd3,52       Set display offset to 52
             # 0xd5,0x80     Set clk div ratio to standard Thumby levels
             # 0xd9,0xf1     Set pre-charge periods to standard Thumby levels
             self._spi.write(bytearray([
-                0xa8,0, 0xd3,0, 0xd5,0x80, 0xd9,0xf1]))
-            sleep_us(_FRAME_TIME_US)
+                0xa8,0, 0xd3,52, 0xd5,0x80, 0xd9,0xf1]))
+            sleep_us(_FRAME_TIME_US*3)
             # 0xa8,39       Set multiplex ratio to height (releasing updates)
-            self._spi.write(bytearray([0xa8,_HEIGHT-1]))
+            # 0xd3,0        Set display offset to 0
+            self._spi.write(bytearray([0xa8,_HEIGHT-1,0xd3,0]))
             if self._state[_ST_INVERT]:
                 self.write_cmd(0xa6 | 1) # Resume device color inversion
             return
