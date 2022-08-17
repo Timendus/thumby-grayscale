@@ -340,6 +340,7 @@ class Grayscale:
         state = ptr32(self._state)
         invert = invert & 1
         state[_ST_INVERT] = invert # GPU color inversion
+        state[_ST_COPY_BUFFS] = 1 # Trigger display of inversion
         if state[_ST_THREAD] != _THREAD_RUNNING:
             self.write_cmd(0xa6 | invert) # Device controller inversion
 
@@ -393,7 +394,6 @@ class Grayscale:
             # This is the main GPU loop.
             # We cycle through each of the 3 display subframe buffers,
             # sending the framebuffer data and various commands.
-            invert = state[_ST_INVERT]
             fn = 0
             while fn < 3:
                 # Send fn'th subframe
@@ -424,11 +424,11 @@ class Grayscale:
                         # By using using ptr32 vars we copy 4 bytes at a time
                         i = 0
                         j = _BUFF_INT_SIZE
+                        inv = state[_ST_INVERT]
                         while i < _BUFF_INT_SIZE:
                             v1 = dBuf[i]
                             v2 = dBuf[j]
-                            if invert:
-                                v1 = -1^v1
+                            v1 ^= -1 if inv else 0
                             # This remaps to the different buffer format.
                             b1[i] = v1 | v2 # white, lightgray and darkgray
                             b2[i] = v1 # white and lightgray
