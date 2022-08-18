@@ -46,16 +46,27 @@ example, or keep reading for more of a guide.
 
 ### Getting it going
 
-First, import the library. Copy the file [`grayscale.py`](./grayscale.py) to
-your project directory and import like so:
+First, you have to import the library.
+
+We're working on getting the grayscale library added to the standard Thumby
+library, but for now you have to do some manual work. You can either:
+
+1. manually add [`thumbyGrayscale.py`](./lib/thumbyGrayscale.py) to the `/lib`
+   directory on your Thumby (and require your users to do the same), or;
+2. supply the library with your game by copying
+   [`thumbyGrayscale.py`](./lib/thumbyGrayscale.py) to your game folder and
+   setting the import path:
+
+  ```python
+  # Fix import path so it can find a local grayscale library if present
+  from sys import path as syspath
+  syspath.insert(0, '/Games/<Your Game Folder>')
+  ```
+
+In either case you can now import `thumbyGrayscale`:
 
 ```python
-# Fix import path so it finds the grayscale library
-import sys
-sys.path.insert(0, "/".join(__file__.split("/")[0:-1]))
-
-# Do actual import
-import grayscale
+import thumbyGrayscale as grayscale
 ```
 
 Next, tell the grayscale library to take over the display:
