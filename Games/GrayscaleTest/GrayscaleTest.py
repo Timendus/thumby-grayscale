@@ -5,9 +5,8 @@
 # pressing A or B.
 
 # Fix import path so it can find a local grayscale library if present
-if '__file__' in globals():
-    from sys import path as syspath
-    syspath.insert(0, "/".join(__file__.split("/")[0:-1]))
+from sys import path as syspath
+syspath.insert(0, '/Games/GrayscaleTest')
 
 # Import dependencies
 from thumbyButton import actionPressed
