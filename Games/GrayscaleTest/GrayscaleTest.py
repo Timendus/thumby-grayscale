@@ -131,6 +131,7 @@ while True:
     gs.drawSprite(cat)
     cat.x += dx
     cat.y += dy
+    cat.mirrorX = dx < 0
     if cat.x == 0 or cat.x == 60:
         dx = -dx
     if cat.y == 0 or cat.y == 31:
