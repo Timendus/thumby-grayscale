@@ -320,11 +320,13 @@ class Grayscale:
         # We can't just break up the longer list of commands automatically,
         # as we might end up separating a command and its parameter(s).
         assert len(cmd) <= len(pendingCmds), "Display commands too long"
-        for i in range(len(cmd)):
+        i = 0
+        while i < len(cmd):
             pendingCmds[i] = cmd[i]
         # Fill the rest of the bytearray with display controller NOPs
-        for i in range(len(cmd), len(pendingCmds)):
+        while i < len(pendingCmds):
             pendingCmds[i] = 0x3e
+            i += 1
         # Notify GPU and wait
         self._state[_ST_PENDING_CMD] = 1
         while self._state[_ST_PENDING_CMD]:
