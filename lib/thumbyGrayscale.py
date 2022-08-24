@@ -371,26 +371,28 @@ class Grayscale:
         while self._state[_ST_THREAD] != _THREAD_RUNNING:
             idle()
 
+
     @micropython.viper
     def _display_thread(self):
         ### GPU (Gray Processing Unit) thread function ###
         # cache various instance variables, buffers, and functions/methods
-        ticks_diff = utime.ticks_diff
-        ticks_us = utime.ticks_us
-        sleep_us = utime.sleep_us
-        buffers = self._subframes
-        postFrameAdj = self._postFrameAdj
+
         postFrameAdjSrc = ptr8(self._postFrameAdjSrc)
         state = ptr32(self._state)
-        spi_write = self._spi.write
-        dc = self._dc
-        preFrameCmds = self._preFrameCmds
-        postFrameCmds = self._postFrameCmds
-        pendingCmds = self._pendingCmds
-        dBuf = ptr32(self.drawBuffer)
-        b1 = ptr32(buffers[0]); b2 = ptr32(buffers[1]); b3 = ptr32(buffers[2])
 
-        dc(0) # command mode
+        buffers:ptr32 = ptr32(array('L', [ptr8(self._subframes[0]), ptr8(self._subframes[1]), ptr8(self._subframes[2])]))
+        postFrameAdj:ptr32 = ptr32(array('L', [ptr8(self._postFrameAdj[0]), ptr8(self._postFrameAdj[1]), ptr8(self._postFrameAdj[2])]))
+        preFrameCmds:ptr8 = ptr8(self._preFrameCmds)
+        postFrameCmds:ptr8 = ptr8(self._postFrameCmds)
+        pendingCmds:ptr8 = ptr8(self._pendingCmds)
+
+        spi0:ptr32 = ptr32(0x4003c000)
+        tmr:ptr32 = ptr32(0x40054000)
+        sio:ptr32 = ptr32(0xd0000000)
+
+        dBuf = ptr32(self.drawBuffer)
+        b1 = ptr32(self._subframes[0]); b2 = ptr32(self._subframes[1]); b3 = ptr32(self._subframes[2])
+
         state[_ST_THREAD] = _THREAD_RUNNING
         while state[_ST_THREAD] == _THREAD_RUNNING:
             # This is the main GPU loop.
@@ -398,24 +400,73 @@ class Grayscale:
             # sending the framebuffer data and various commands.
             fn = 0
             while fn < 3:
-                # Send fn'th subframe
-                t0 = ticks_us()
-                # Send the pre-frame commands to 'park' the row counter
-                spi_write(preFrameCmds)
-                # Now send the (sub) frame data
-                dc(1) # frame data mode
-                spi_write(buffers[fn])
-                dc(0) # back to command mode
-                # Send the first instance of the contrast adjust command
-                spi_write(postFrameAdj[fn])
-                # Wait for the pre-frame time to complete
-                sleep_us(_PRE_FRAME_TIME_US - int(ticks_diff(ticks_us(), t0)))
-                t0 = ticks_us()
-                # Send the post-frame commands to display the frame
-                spi_write(postFrameCmds)
-                # Adjust the contrast for the specific frame number again.
+                time_out = tmr[10] + _PRE_FRAME_TIME_US
+                # the 'dc' output is used to switch the controller to receive
+                # commands (0) or frame data (1)
+                sio[6] = 1 << 17 # dc(0)
+
+                # send the pre-frame commands to 'park' the row counter
+                # spi_write(preFrameCmds)
+                i = 0
+                while i < 4:
+                    while (spi0[3] & 2) == 0: pass          # while !(SPI0->SR & SPI_SSPSR_RNE_BITS): pass
+                    spi0[2] = preFrameCmds[i]               # SPI0->DR = buff[i]
+                    i += 1
+                while (spi0[3] & 4) == 4: i = spi0[2]       # while SPI0->SR & SPI_SSPSR_RNE_BITS: read SPI0->DR
+                while (spi0[3] & 0x10) == 0x10: pass        # while SPI0->SR & SPI_SSPSR_BSY_BITS: pass
+                while (spi0[3] & 4) == 4: i = spi0[2]       # while SPI0->SR & SPI_SSPSR_RNE_BITS: read SPI0->DR
+
+                sio[5] = 1 << 17 # dc(1)
+                # and then send the frame
+                # spi_write(buffers[fn])
+                i = 0
+                spibuff:ptr8 = ptr8(buffers[fn])
+                while i < 360:
+                    while (spi0[3] & 2) == 0: pass
+                    spi0[2] = spibuff[i]
+                    i += 1
+                while (spi0[3] & 4) == 4: i = spi0[2]
+                while (spi0[3] & 0x10) == 0x10: pass
+                while (spi0[3] & 4) == 4: i = spi0[2]
+
+                sio[6] = 1 << 17 # dc(0)
+                # send the first instance of the contrast adjust command
+                #spi_write(postFrameAdj[fn])
+                i = 0
+                spibuff:ptr8 = ptr8(postFrameAdj[fn])
+                while i < 2:
+                    while (spi0[3] & 2) == 0: pass
+                    spi0[2] = spibuff[i]
+                    i += 1
+                while (spi0[3] & 4) == 4: i = spi0[2]
+                while (spi0[3] & 0x10) == 0x10: pass
+                while (spi0[3] & 4) == 4: i = spi0[2]
+
+                # wait for the pre-frame time to complete
+                while (tmr[10] - time_out) < 0:
+                    pass
+
+                time_out = tmr[10] + _FRAME_TIME_US
+
+                # now send the post-frame commands to display the frame
+                # spi_write(postFrameCmds)
+                i = 0
+                while i < 4:
+                    while (spi0[3] & 2) == 0: pass
+                    spi0[2] = postFrameCmds[i]
+                    i += 1
+                # and adjust the contrast for the specific frame number again.
                 # If we do not do this twice, the screen can glitch.
-                spi_write(postFrameAdj[fn])
+                # spi_write(postFrameAdj[fn])
+                i = 0
+                spibuff:ptr8 = ptr8(postFrameAdj[fn])
+                while i < 2:
+                    while (spi0[3] & 2) == 0: pass
+                    spi0[2] = spibuff[i]
+                    i += 1
+                while (spi0[3] & 4) == 4: i = spi0[2]
+                while (spi0[3] & 0x10) == 0x10: pass
+                while (spi0[3] & 4) == 4: i = spi0[2]
 
                 # Tasks that only happen after the last subframe
                 if fn == 2:
@@ -426,11 +477,10 @@ class Grayscale:
                         # By using using ptr32 vars we copy 4 bytes at a time
                         i = 0
                         j = _BUFF_INT_SIZE
-                        inv = state[_ST_INVERT]
+                        inv = -1 if state[_ST_INVERT] else 0
                         while i < _BUFF_INT_SIZE:
-                            v1 = dBuf[i]
+                            v1 = dBuf[i] ^ inv
                             v2 = dBuf[j]
-                            v1 ^= -1 if inv else 0
                             # This remaps to the different buffer format.
                             b1[i] = v1 | v2 # white, lightgray and darkgray
                             b2[i] = v1 # white and lightgray
@@ -441,27 +491,32 @@ class Grayscale:
                     # Check if there's a pending contrast/brightness change
                     if state[_ST_CONTRAST]:
                         # Copy in the new contrast adjustments
-                        postFrameAdj[0][1] = postFrameAdjSrc[0]
-                        postFrameAdj[1][1] = postFrameAdjSrc[1]
-                        postFrameAdj[2][1] = postFrameAdjSrc[2]
+                        ptr8(postFrameAdj[0])[1] = postFrameAdjSrc[0]
+                        ptr8(postFrameAdj[1])[1] = postFrameAdjSrc[1]
+                        ptr8(postFrameAdj[2])[1] = postFrameAdjSrc[2]
                         state[_ST_CONTRAST] = 0
                     # Check if there are pending display controller commands
                     elif state[_ST_PENDING_CMD]:
-                        spi_write(pendingCmds)
+                        #spi_write(pendingCmds)
+                        i = 0
+                        while i < 8:
+                            while (spi0[3] & 2) == 0: pass
+                            spi0[2] = pendingCmds[i]
+                            i += 1
+                        while (spi0[3] & 4) == 4: i = spi0[2]
+                        while (spi0[3] & 0x10) == 0x10: pass
+                        while (spi0[3] & 4) == 4: i = spi0[2]
                         state[_ST_PENDING_CMD] = 0
 
-                # Precise idle wait for next subframe timing.
-                # This is a two stage wait for the frame time to complete.
-                # We use sleep_ms first to allow idle loop usage,
-                # with >>10 for a fast /1000 approximation.
-                # Then we use sleep_us to busy wait for the precise time.
-                # TODO sleep_ms((_FRAME_TIME_US - int(ticks_diff(ticks_us(), t0))) >> 10)
-                sleep_us(_FRAME_TIME_US - int(ticks_diff(ticks_us(), t0)))
+                # wait for frame time to complete
+                while (tmr[10] - time_out) < 0:
+                    pass
 
                 fn += 1
 
         # Announce the thread is done
         state[_ST_THREAD] = _THREAD_STOPPED
+
 
     def stopGPU(self):
         ### Disable grayscale, stopping the running thread.
