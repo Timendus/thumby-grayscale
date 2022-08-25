@@ -409,7 +409,7 @@ class Grayscale:
                 # spi_write(preFrameCmds)
                 i = 0
                 while i < 4:
-                    while (spi0[3] & 2) == 0: pass          # while !(SPI0->SR & SPI_SSPSR_RNE_BITS): pass
+                    while (spi0[3] & 2) == 0: pass          # while !(SPI0->SR & SPI_SSPSR_TNF_BITS): pass
                     spi0[2] = preFrameCmds[i]               # SPI0->DR = buff[i]
                     i += 1
                 while (spi0[3] & 4) == 4: i = spi0[2]       # while SPI0->SR & SPI_SSPSR_RNE_BITS: read SPI0->DR
