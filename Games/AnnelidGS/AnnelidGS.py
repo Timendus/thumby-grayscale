@@ -29,6 +29,10 @@ import random
 import time
 import machine
 
+import thumbyGrayscale
+thumby.display = thumbyGrayscale.display
+thumbyGrayscale.display.startGPU()
+
 # Draw the game splash
 thumby.display.fill(0)
 thumby.display.drawText("Tiny", 24, 0, 1)
@@ -60,7 +64,8 @@ startFPS = 3.0
 
     # Draws the worm
 def drawWorm():
-    for tile in worm:
+    for tile in reversed(worm):
+        thumby.display.drawFilledRectangle(tile[0]*4-1, tile[1]*4-1, 6, 6, 0)
         thumby.display.drawRectangle(tile[0]*4, tile[1]*4, 4, 4, 1)
         print(tile[0]*4)
 
@@ -120,6 +125,7 @@ while(gameRunning == True):
         while(thumby.actionPressed() == False):
             pass # Wait for the user to give us something
         if(thumby.buttonA.pressed() == True):
+            thumbyGrayscale.display.stopGPU()
             machine.reset()
         elif(thumby.buttonB.pressed() == True):
             gameRunning = True
@@ -130,13 +136,13 @@ while(gameRunning == True):
             startTime=time.ticks_ms()
 
     # Draw
-    thumby.display.fill(0)
-    thumby.display.drawRectangle(0, 0, 72, 40, 1)
+    thumby.display.fill(2)
+    thumby.display.drawRectangle(0, 0, 72, 40, 3)
     drawWorm()
     if(time.ticks_ms() % 1000 < 500):
         thumby.display.drawFilledRectangle(food[0]*4, food[1]*4, 4, 4, 1)
     else:
-        thumby.display.drawFilledRectangle(food[0]*4+1, food[1]*4+1, 2, 2, 1)
+        thumby.display.drawFilledRectangle(food[0]*4+1, food[1]*4+1, 2, 2, 3)
 
     thumby.display.setFPS(startFPS + (time.ticks_ms()-startTime)/10000) # increase FPS by 1 every 10 seconds
     thumby.display.update()
