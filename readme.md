@@ -63,16 +63,16 @@ library, but for now you have to do some manual work. You can either:
   syspath.insert(0, '/Games/<Your Game Folder>')
   ```
 
-In either case you can now import `thumbyGrayscale`:
+In either case you can now import the relevant objects from `thumbyGrayscale`:
 
 ```python
-import thumbyGrayscale as grayscale
+from thumbyGrayscale import display, ShadedSprite
 ```
 
 Next, tell the grayscale library to take over the display:
 
 ```python
-gs = grayscale.Grayscale()
+display.startGPU()
 ```
 
 From here on, **do not** use any of the `thumbyGraphics` or `thumby.display`
@@ -84,24 +84,25 @@ anything.
 Now we can use the drawing functions from the grayscale library (instead of the
 Thumby libraries) to put grayscale images on the screen. All the functions you
 are used to are still available, but now require you to specify a colour or to
-supply two layers of bitmap data. Make sure you use `grayscale.Sprite` for your
-sprites:
+supply two layers of bitmap data. Make sure you use the `ShadedSprite` for your
+grayscale sprites. Regular sprites can be used too, but those will just display
+in black and white.
 
 ```python
-cat = grayscale.Sprite(
+cat = ShadedSprite(
     12, 9,         # Dimensions
     bytearray([    # Layer 1 data
         175,7,169,254,237,255,191,157,190,233,255,175,
         1,1,0,1,1,1,1,1,1,1,1,1
     ]),
     bytearray([    # Layer 2 data
-        255,255,87,7,3,3,3,67,3,7,7,255,
-        1,1,1,0,0,0,0,0,0,0,1,1
+        80,248,254,249,238,252,188,222,189,238,248,80,
+        0,0,1,1,1,1,1,1,1,1,0,0
     ]),
     30, 15         # Position
 )
-gs.drawSprite(cat)
-gs.update()
+display.drawSprite(cat)
+display.update()
 ```
 
 As you can see, sprites are now composed of two layers instead of just a single
@@ -110,27 +111,27 @@ bitmap. The colour of a pixel is defined by the values in both layers:
 | Layer 1 | Layer 2 | Colour                                           |
 |---------|---------|--------------------------------------------------|
 | 0       | 0       | ![#000000](./pictures/black.png) Black           |
-| 1       | 0       | ![#666666](./pictures/darkgray.png) Dark gray    |
-| 0       | 1       | ![#999999](./pictures/lightgray.png) Light gray  |
-| 1       | 1       | ![#DDDDDD](./pictures/white.png) White           |
+| 1       | 0       | ![#DDDDDD](./pictures/white.png) White           |
+| 0       | 1       | ![#666666](./pictures/darkgray.png) Dark gray    |
+| 1       | 1       | ![#999999](./pictures/lightgray.png) Light gray  |
 
 The text, line drawing and filling functions can now be used with four colours
 instead of two, like so:
 
 ```python
-gs.fill(gs.BLACK)
-gs.drawFilledRectangle(16, 9, 40, 21, gs.WHITE)
-gs.drawText("Hello", 18, 11, gs.LIGHTGRAY)
-gs.drawText("world!", 18, 19, gs.DARKGRAY)
-gs.update()
+display.fill(display.BLACK)
+display.drawFilledRectangle(16, 9, 40, 21, display.WHITE)
+display.drawText("Hello", 18, 11, display.LIGHTGRAY)
+display.drawText("world!", 18, 19, display.DARKGRAY)
+display.update()
 ```
 
-| Constant       | Value | Colour                                           |
-| -------------- |-------|--------------------------------------------------|
-| `gs.BLACK`     | 0     | ![#000000](./pictures/black.png) Black           |
-| `gs.DARKGRAY`  | 1     | ![#666666](./pictures/darkgray.png) Dark gray    |
-| `gs.LIGHTGRAY` | 2     | ![#999999](./pictures/lightgray.png) Light gray  |
-| `gs.WHITE`     | 3     | ![#DDDDDD](./pictures/white.png) White           |
+| Constant            | Value | Colour                                           |
+| ------------------- |-------|--------------------------------------------------|
+| `display.BLACK`     | 0     | ![#000000](./pictures/black.png) Black           |
+| `display.WHITE`     | 1     | ![#DDDDDD](./pictures/white.png) White           |
+| `display.DARKGRAY`  | 2     | ![#666666](./pictures/darkgray.png) Dark gray    |
+| `display.LIGHTGRAY` | 3     | ![#999999](./pictures/lightgray.png) Light gray  |
 
 ### Using the buffers directly
 
@@ -138,22 +139,26 @@ For more advanced stuff, you may want to access the display buffers for the two
 grayscale layers directly. These exist in two `bytearray`s at these locations:
 
 ```python
-gs.buffer1
-gs.buffer2
+display.buffer
+display.shading
 ```
+
+The first is the "regular" black and white buffer, the second is the shading
+buffer that gives the grayscale image its additional colours.
 
 You can wrap these in a
 [`FrameBuffer`](https://docs.micropython.org/en/v1.15/library/framebuf.html) if
 you want, and manipulate the `bytearray`s to your heart's content. Make sure you
-call `gs.update()` or `gs.show()` afterwards, to show the result on the screen.
+call `display.update()` or `display.show()` afterwards, to show the result on
+the screen.
 
 ### Stopping
 
 If your application exits back to the menu, or you want to switch back to black
-and white, make sure you stop the grayscale library's thread:
+and white entirely, make sure you stop the grayscale library's thread:
 
 ```python
-gs.stop()
+display.stopGPU()
 ```
 
 ## Implementation notes and links
