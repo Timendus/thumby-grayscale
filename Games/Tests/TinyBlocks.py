@@ -237,13 +237,15 @@ while(True):
   while(getcharinputNew()==' '):
     if((time.ticks_ms()//1000)&1):
       if isdisplayed == 0 :
+        thumby.display.drawText("START", 72//2-13, 27,2)
+        thumby.display.drawText("START", 72//2-14, 27,3)
         thumby.display.drawText("START", 72//2-14, 26,1)
         thumby.display.update()
         isdisplayed = 1
     else:
       if isdisplayed == 1 :
-        #thumby.display.fillRect(10,24,72-20,16,0)
-        thumby.display.drawText("START", 72//2-14, 26,0)
+        thumby.display.fill(0)
+        thumby.display.blitSHD(TinyBlocksSplash,TinyBlocksSplashSHD, 0,0, 72, 40,0,0,0)
         thumby.display.update()
         isdisplayed = 0
 
