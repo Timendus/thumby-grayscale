@@ -956,7 +956,7 @@ class Grayscale:
 
     @micropython.native
     def drawSprite(self, s):
-        self.blitSHD(s.bitmap, s.bitmapSHD if isinstance(s, ShadedSprite) else 0,
+        self.blitSHD(s.bitmap, s.bitmapSHD if isinstance(s, Sprite) else 0,
             s.x, s.y, s.width, s.height, s.key, s.mirrorX, s.mirrorY)
 
     @micropython.viper
@@ -1055,17 +1055,20 @@ class Grayscale:
     @micropython.native
     def drawSpriteWithMask(self, s, m):
         self.blitWithMaskSHD(
-            s.bitmap, s.bitmapSHD if isinstance(s, ShadedSprite) else 0,
+            s.bitmap, s.bitmapSHD if isinstance(s, Sprite) else 0,
             s.x, s.y, s.width, s.height, s.key, s.mirrorX, s.mirrorY, m.bitmap)
 
 
-class ShadedSprite(_Sprite):
+class Sprite(_Sprite):
     ### Extends the Sprite with grayscale support.
-    # Pass in the shadingData to the constructor.
+    # Pass in the shadingData in with bitmapData optionally as a tuple.
     # 1 sets white to lightgray and black to darkgray.
     ###
     @micropython.native
-    def __init__(self, width, height, bitmapData, shadingData, x=0, y=0, key=-1, mirrorX=False, mirrorY=False):
+    def __init__(self, width, height, bitmapData, x=0, y=0, key=-1, mirrorX=False, mirrorY=False):
+        shadingData = None
+        if type(bitmapData) == tuple:
+            bitmapData, shadingData = bitmapData
         super().__init__(width, height, bitmapData, x, y, key, mirrorX, mirrorY)
         self.bitmapSourceSHD = shadingData
         if type(self.bitmapSourceSHD)==str:

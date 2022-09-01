@@ -74,16 +74,18 @@ supply two layers of bitmap data. Make sure you use `grayscale.Sprite` for your
 sprites:
 
 ```python
-cat = thumbyGrayscale.ShadedSprite(
+cat = thumbyGrayscale.Sprite(
     12, 9,         # Dimensions
-    bytearray([    # Layer 1 data
-        175, 7, 169, 254, 237, 255, 191, 157, 190, 233, 255, 175,
-        1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1]
-    ]),
-    bytearray([    # Layer 2 data
-        80, 248, 254, 249, 238, 252, 188, 222, 189, 238, 248, 80,
-        0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0]
-    ]),
+    (
+        bytearray([    # Layer 1 data
+            175, 7, 169, 254, 237, 255, 191, 157, 190, 233, 255, 175,
+            1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+        ]),
+        bytearray([    # Layer 2 data
+            80, 248, 254, 249, 238, 252, 188, 222, 189, 238, 248, 80,
+            0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0]
+        ])
+    ),
     30, 15         # Position
 )
 gs.drawSprite(cat)
