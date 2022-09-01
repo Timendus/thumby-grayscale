@@ -58,7 +58,7 @@ Next, tell the grayscale library to take over the display:
 
 ```python
 gs = thumbyGrayscale.display
-gs.startGPU()
+gs.enableGrayscale()
 ```
 
 From here on, **do not** use any of the `thumbyGraphics` or `thumby.display`
@@ -139,7 +139,7 @@ If your application exits back to the menu, or you want to switch back to black
 and white, make sure you stop the grayscale library's thread:
 
 ```python
-gs.stopGPU()
+gs.disableGrayscale()
 ```
 
 ## Implementation notes and links

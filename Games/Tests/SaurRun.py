@@ -35,7 +35,7 @@ machine.freq(125000000)
 
 import thumbyGrayscale
 thumby.display = thumbyGrayscale.display
-thumbyGrayscale.display.startGPU()
+thumbyGrayscale.display.enableGrayscale()
 
 gc.enable() # This line helps make sure we don't run out of memory
 
@@ -162,7 +162,7 @@ while(GameRunning):
 
             elif(thumby.buttonA.pressed() == True):
                 # Quit
-                thumbyGrayscale.display.stopGPU()
+                thumbyGrayscale.display.disableGrayscale()
                 machine.reset()
 
     # Is the cactus out of view?

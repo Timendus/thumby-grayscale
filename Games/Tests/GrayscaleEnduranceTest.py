@@ -23,7 +23,7 @@ def actionPressed():
 
 grayscale.Sprite = grayscale.ShadedSprite
 gs = grayscale.display
-gs.startGPU()
+gs.enableGrayscale()
 
 # Helper function
 
@@ -193,5 +193,5 @@ while(True):
     
     # End of demo!
 
-gs.stopGPU()
+gs.disableGrayscale()
 reset()

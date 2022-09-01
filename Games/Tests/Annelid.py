@@ -31,7 +31,7 @@ import machine
 
 import thumbyGrayscale
 thumby.display = thumbyGrayscale.display
-thumbyGrayscale.display.startGPU()
+thumbyGrayscale.display.enableGrayscale()
 
 # Draw the game splash
 thumby.display.fill(0)
@@ -123,7 +123,7 @@ while(gameRunning == True):
         while(thumby.actionPressed() == False):
             pass # Wait for the user to give us something
         if(thumby.buttonA.pressed() == True):
-            thumbyGrayscale.display.stopGPU()
+            thumbyGrayscale.display.disableGrayscale()
             machine.reset()
         elif(thumby.buttonB.pressed() == True):
             gameRunning = True

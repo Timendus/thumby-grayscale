@@ -35,7 +35,7 @@ for i in range(2):
     if i==0:
         import thumbyGrayscale as grayscale
         gs = grayscale.display
-        gs.startGPU()
+        gs.enableGrayscale()
         cat = grayscale.ShadedSprite(
             12, 9,         # Dimensions
             bytearray([    # Layer 2 data
@@ -50,7 +50,7 @@ for i in range(2):
         )
         print("\ncore0 GPUv2.1")
     else:
-        gs.stopGPU()
+        gs.disableGrayscale()
         import grayscale as grayscale
         gs = grayscale.Grayscale()
         cat = grayscale.Sprite(

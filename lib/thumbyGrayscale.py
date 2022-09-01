@@ -51,7 +51,7 @@ class Grayscale:
     # Most games can be switched to support grayscale with the following:
     #     import thumbyGrayscale
     #     thumby.display = thumbyGrayscale.display
-    #     thumbyGrayscale.display.startGPU()
+    #     thumbyGrayscale.display.enableGrayscale()
     ###
 
     # BLACK and WHITE is 0 and 1 to match compatbility with the std Thumby API.
@@ -171,10 +171,10 @@ class Grayscale:
 
     # Allow use of 'with' for manaing the GPU state
     def __enter__(self):
-        self.startGPU()
+        self.enableGrayscale()
         return self
     def __exit__(self, type, value, traceback):
-        self.stopGPU()
+        self.disableGrayscale()
 
 
     ## Display device functions ##
@@ -346,7 +346,7 @@ class Grayscale:
         if state[_ST_THREAD] != _THREAD_RUNNING:
             self.write_cmd(0xa6 | invert) # Device controller inversion
 
-    def startGPU(self):
+    def enableGrayscale(self):
         ### Activate grayscale in the display (Gray Processing Unit).
         # Takes over the second core.
         # When the GPU is not running, the display will only show
@@ -518,7 +518,7 @@ class Grayscale:
         state[_ST_THREAD] = _THREAD_STOPPED
 
 
-    def stopGPU(self):
+    def disableGrayscale(self):
         ### Disable grayscale, stopping the running thread.
         # If modeGPU is set to 1, it will not reset the display
         # controller configuration.

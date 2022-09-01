@@ -10,7 +10,7 @@ import machine
 
 import thumbyGrayscale
 thumby.display = thumbyGrayscale.display
-thumbyGrayscale.display.startGPU()
+thumbyGrayscale.display.enableGrayscale()
 
 machine.freq(48000000)
 
@@ -364,4 +364,4 @@ while(True):
     
   a=0
 
-thumbyGrayscale.display.stopGPU()
+thumbyGrayscale.display.disableGrayscale()

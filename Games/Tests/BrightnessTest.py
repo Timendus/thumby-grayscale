@@ -23,7 +23,7 @@ import thumbyGrayscale as grayscale
 
 # Initialization
 gs = grayscale.display
-gs.startGPU()
+gs.enableGrayscale()
 gs.setFPS(60)
 
 inv = 0
@@ -46,9 +46,9 @@ while(thumby.buttonR.pressed() == False):
         inv = 0 if inv else 1
         gs.display.invert(inv)
     if thumby.buttonU.justPressed():
-        gs.stopGPU()
+        gs.disableGrayscale()
     if thumby.buttonD.justPressed():
-        gs.startGPU()
+        gs.enableGrayscale()
     if thumby.buttonA.justPressed():
         contrastCycle = -1
         contrast = 0 if contrast==127 else 28 if contrast==0 else 127
@@ -61,6 +61,6 @@ while(thumby.buttonR.pressed() == False):
     gs.update()
     t += 1
 
-gs.stopGPU()
+gs.disableGrayscale()
 freq(48000000)
 reset

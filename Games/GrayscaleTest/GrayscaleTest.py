@@ -17,7 +17,7 @@ import thumbyGrayscale as grayscale
 
 grayscale.Sprite = grayscale.ShadedSprite
 gs = grayscale.display
-gs.startGPU()
+gs.enableGrayscale()
 
 # Helper function
 
@@ -189,5 +189,5 @@ while not actionPressed():
 
 # End of demo!
 
-gs.stopGPU()
+gs.disableGrayscale()
 reset()

@@ -8,7 +8,7 @@
 '''
 import thumbyGrayscale
 thumby.display = thumbyGrayscale.display
-thumbyGrayscale.display.startGPU()
+thumbyGrayscale.display.enableGrayscale()
 '''
 #
 
@@ -65,7 +65,7 @@ gs.drawText("world!", 18, 19, gs.DARKGRAY)
 gs.update()
 sleep_ms(500)
 
-gs.startGPU()
+gs.enableGrayscale()
 
 gs.fill(gs.DARKGRAY)
 gs.drawLine(14, 3, 58, 3, gs.LIGHTGRAY)
@@ -141,9 +141,9 @@ while c < 200:
     gs.update()
     c += 1
     if c%60==0:
-        gs.startGPU()
+        gs.enableGrayscale()
     elif c%60==30:
-        gs.stopGPU()
+        gs.disableGrayscale()
 
 c = dx = dy = 1
 while c < 200:
@@ -187,24 +187,24 @@ parrotSprite = legacy_sprite(grayscale.ShadedSprite(72, 40, bytearray([
     54,125,56,153,128,16,254,105,14,143,141,131,6,73,247,170,4,16,64,2,4,0,0,0,0,0,0,0,0,0,0,0,0,128,0,128,32,128,80,128,0,160,0,144,0,131,8,67,20,67,21,178,79,181,74,189,134,187,86,189,11,64,181,105,210,128,64,0,19,127,2,132
 ])))
 
-gs.startGPU()
+gs.enableGrayscale()
 gs.drawSprite(girlSprite)
 gs.update()
 sleep_ms(1000)
-gs.stopGPU()
+gs.disableGrayscale()
 gs.drawSprite(girlSprite)
 gs.update()
 sleep_ms(1000)
 
-gs.startGPU()
+gs.enableGrayscale()
 gs.drawSprite(parrotSprite)
 gs.update()
 sleep_ms(1000)
 
-gs.stopGPU()
+gs.disableGrayscale()
 sleep_ms(1000)
 
-gs.startGPU()
+gs.enableGrayscale()
 
 # Bounce animation using drawing primitives
 
@@ -253,5 +253,5 @@ while c < 210:
 
 # End of demo!
 
-gs.stopGPU()
+gs.disableGrayscale()
 freq(48000000)
