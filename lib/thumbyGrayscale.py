@@ -131,15 +131,15 @@ class Grayscale:
         if not check_upython_version(1, 19, 1):
             raise NotImplementedError('Greyscale support requires at least Micropython v1.19.1. Please update via the Thumby code editor')
 
-        self.spi = SPI(0, sck=Pin(18), mosi=Pin(19))
-        self.dc = Pin(17)
-        self.cs = Pin(16)
-        self.res = Pin(20)
+        self._spi = SPI(0, sck=Pin(18), mosi=Pin(19))
+        self._dc = Pin(17)
+        self._cs = Pin(16)
+        self._res = Pin(20)
 
-        self.spi.init(baudrate=100 * 1000 * 1000, polarity=0, phase=0)
-        self.res.init(Pin.OUT, value=1)
-        self.dc.init(Pin.OUT, value=0)
-        self.cs.init(Pin.OUT, value=1)
+        self._spi.init(baudrate=100 * 1000 * 1000, polarity=0, phase=0)
+        self._res.init(Pin.OUT, value=1)
+        self._dc.init(Pin.OUT, value=0)
+        self._cs.init(Pin.OUT, value=1)
 
         self.width = 72
         self.height = 40
@@ -175,7 +175,7 @@ class Grayscale:
         # but seems to still have the desired effect.
         # 0xa8,0    Set multiplex ratio to 1
         # 0xd3,52   Set display offset to 52
-        self.pre_frame_cmds = bytearray([0xa8,0, 0xd3,52])
+        self._preFrameCmds = bytearray([0xa8,0, 0xd3,52])
         # Once the frame has been loaded into the display controller's GDRAM, we
         # set the controller to output 57 rows, and then delay for the nominal
         # time for 48 rows to be output.
@@ -188,7 +188,7 @@ class Grayscale:
         # 0xd3,x    Set display offset. Since rows are scanned in reverse, the
         #           calculation must work backwards from the last controller row.
         # 0xa8,57-1 Set multiplex ratio to 57
-        self.post_frame_cmds = bytearray([0xd3,40+(64-57), 0xa8,57-1])
+        self._postFrameCmds = bytearray([0xd3,40+(64-57), 0xa8,57-1])
 
         # We enhance the greys by modulating the contrast.
         # Use setting from thumby.cfg
@@ -205,7 +205,7 @@ class Grayscale:
         brightnessVals = [0,56,127]
         brightnessVal = brightnessVals[brightnessSetting]
         # 0x81,<val>        Set Bank0 contrast value to <val>
-        self.post_frame_adj = [bytearray([0x81,brightnessVal>>5]), bytearray([0x81,brightnessVal]), bytearray([0x81,(brightnessVal << 1) + 1])]
+        self._postFrameAdj = [bytearray([0x81,brightnessVal>>5]), bytearray([0x81,brightnessVal]), bytearray([0x81,(brightnessVal << 1) + 1])]
 
         # It's better to avoid using regular variables for thread sychronisation.
         # Instead, elements of an array/bytearray should be used.
@@ -213,7 +213,7 @@ class Grayscale:
         # the atomicity of any element accesses.
         self._state = array('I', [0,0,0,0xff])
 
-        self.pending_cmds = bytearray([0] * 8)
+        self._pendingCmds = bytearray([0] * 8)
 
         self.setFont('lib/font5x7.bin', 5, 7, 1)
         #self.setFont('lib/font8x8.bin', 8, 8, 0)
@@ -242,18 +242,18 @@ class Grayscale:
 
 
     def reset(self):
-        self.res(1)
+        self._res(1)
         utime.sleep_ms(1)
-        self.res(0)
+        self._res(0)
         utime.sleep_ms(10)
-        self.res(1)
+        self._res(1)
         utime.sleep_ms(10)
 
 
     def init_display(self):
         self.reset()
-        self.cs(0)
-        self.dc(0)
+        self._cs(0)
+        self._dc(0)
         # initialise as usual, except with shortest pre-charge periods and highest clock frequency
         # 0xae          Display Off
         # 0x20,0x00     Set horizontal addressing mode
@@ -273,19 +273,19 @@ class Grayscale:
         # 0x8d,0x14     Charge bump setting: enable charge pump during display on
         # 0xad,0x30     Select internal 30uA Iref (max Iseg=240uA) during display on
         # 0xf           Set display on
-        self.spi.write(bytearray([
+        self._spi.write(bytearray([
             0xae, 0x20,0x00, 0x40, 0xa1, 0xa8,63, 0xc8, 0xd3,0, 0xda,0x12, 0xd5,0xf0, 0xd9,0x11, 0xdb,0x20, 0x81,0x7f,
             0xa4, 0xa6, 0x8d,0x14, 0xad,0x30, 0xaf]))
-        self.dc(1)
+        self._dc(1)
         # clear the entire GDRAM
         zero32 = bytearray([0] * 32)
         for _ in range(32):
-            self.spi.write(zero32)
-        self.dc(0)
+            self._spi.write(zero32)
+        self._dc(0)
         # set the GDRAM window
         # 0x21,28,99    Set column start (28) and end (99) addresses
         # 0x22,0,4      Set page start (0) and end (4) addresses0
-        self.spi.write(bytearray([0x21,28,99, 0x22,0,4]))
+        self._spi.write(bytearray([0x21,28,99, 0x22,0,4]))
 
 
     def stop(self):
@@ -293,17 +293,17 @@ class Grayscale:
             self._state[_ST_THREAD] = _THREAD_STOPPING
             while self._state[_ST_THREAD] != _THREAD_STOPPED:
                 idle()
-        self.cs(1)
+        self._cs(1)
         self.reset()
-        self.cs(0)
-        self.dc(0)
+        self._cs(0)
+        self._dc(0)
         # reinitialise to the normal configuration. Copied from ssd1306.py
-        self.spi.write(bytearray([
+        self._spi.write(bytearray([
             0xae, 0x20,0x00, 0x40, 0xa1, 0xa8,self.height-1, 0xc8, 0xd3,0, 0xda,0x12, 0xd5,0x80,
             0xd9,0xf1, 0xdb,0x20, 0x81,0x7f,
             0xa4, 0xa6, 0x8d,0x14, 0xad,0x30, 0xaf,
             0x21,28,99, 0x22,0,4]))
-        self.cs(1)
+        self._cs(1)
 
     @micropython.native
     def write_cmd(self, cmd):
@@ -312,26 +312,26 @@ class Grayscale:
         elif not cmd is bytearray:
             cmd = bytearray([cmd])
         if self._state[_ST_THREAD] == _THREAD_RUNNING:
-            pending_cmds = self.pending_cmds
-            if len(cmd) > len(pending_cmds):
+            pendingCmds = self._pendingCmds
+            if len(cmd) > len(pendingCmds):
                 # We can't just break up the longer list of commands automatically, as we
                 # might end up separating a command and its parameter(s).
-                raise ValueError('Cannot send more than %u bytes using write_cmd()' % len(pending_cmds))
+                raise ValueError('Cannot send more than %u bytes using write_cmd()' % len(pendingCmds))
             i = 0
             while i < len(cmd):
-                pending_cmds[i] = cmd[i]
+                pendingCmds[i] = cmd[i]
                 i += 1
             # Fill the rest of the bytearray with display controller NOPs
             # This is probably better than having to create slice or a memoryview in the GPU thread
-            while i < len(pending_cmds):
-                pending_cmds[i] = 0x3e
+            while i < len(pendingCmds):
+                pendingCmds[i] = 0x3e
                 i += 1
             self._state[_ST_PENDING_CMD] = 1
             while self._state[_ST_PENDING_CMD]:
                 idle()
         else:
-            self.dc(0)
-            self.spi.write(cmd)
+            self._dc(0)
+            self._spi.write(cmd)
 
     def poweroff(self):
         self.write_cmd(0xae)
@@ -417,13 +417,13 @@ class Grayscale:
     def _display_thread(self):
         # local object arrays for display framebuffers and post-frame commands
         buffers = array('O', [self._buffer1, self._buffer2, self._buffer3])
-        post_frame_adj = array('O', [self.post_frame_adj[0], self.post_frame_adj[1], self.post_frame_adj[2]])
+        postFrameAdj = array('O', [self._postFrameAdj[0], self._postFrameAdj[1], self._postFrameAdj[2]])
         # cache various instance variables, buffers, and functions/methods
         state:ptr32 = ptr32(self._state)
-        spi_write = self.spi.write
-        dc = self.dc
-        pre_frame_cmds:ptr = self.pre_frame_cmds
-        post_frame_cmds:ptr = self.post_frame_cmds
+        spi_write = self._spi.write
+        dc = self._dc
+        preFrameCmds:ptr = self._preFrameCmds
+        postFrameCmds:ptr = self._postFrameCmds
         ticks_us = utime.ticks_us
         ticks_diff = utime.ticks_diff
         sleep_ms = utime.sleep_ms
@@ -450,21 +450,21 @@ class Grayscale:
                     # commands (0) or frame data (1)
                     dc(0)
                     # send the pre-frame commands to 'park' the row counter
-                    spi_write(pre_frame_cmds)
+                    spi_write(preFrameCmds)
                     dc(1)
                     # and then send the frame
                     spi_write(buffers[fn])
                     dc(0)
                     # send the first instance of the contrast adjust command
-                    spi_write(post_frame_adj[fn])
+                    spi_write(postFrameAdj[fn])
                     # wait for the pre-frame time to complete
                     sleep_us(_PRE_FRAME_TIME_US - int(ticks_diff(ticks_us(), t0)))
                     t0 = ticks_us()
                     # now send the post-frame commands to display the frame
-                    spi_write(post_frame_cmds)
+                    spi_write(postFrameCmds)
                     # and adjust the contrast for the specific frame number again.
                     # If we do not do this twice, the screen can glitch.
-                    spi_write(post_frame_adj[fn])
+                    spi_write(postFrameAdj[fn])
                     # check if there's a pending frame copy required
                     # we only copy the paint framebuffers to the display framebuffers on
                     # the last frame to avoid screen-tearing artefacts
@@ -491,9 +491,9 @@ class Grayscale:
                         contrast = state[_ST_CONTRAST]
                         state[_ST_CONTRAST] = 0xffff
                         # shift the value to provide 3 different levels
-                        post_frame_adj[0][1] = contrast >> 5
-                        post_frame_adj[1][1] = contrast >> 1
-                        post_frame_adj[2][1] = (contrast << 1) + 1
+                        postFrameAdj[0][1] = contrast >> 5
+                        postFrameAdj[1][1] = contrast >> 1
+                        postFrameAdj[2][1] = (contrast << 1) + 1
                     # check if there are pending commands
                     elif state[_ST_PENDING_CMD]:
                         # and send them
