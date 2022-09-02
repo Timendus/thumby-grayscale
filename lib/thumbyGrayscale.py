@@ -96,28 +96,28 @@ class Sprite:
                 self.bitmap2 = memoryview(self.bitmapSource2)[offset:offset+self.bitmapByteCount]
 
 
-# You can't use const() to define class properties, so we'll define them here
-
-# The times below are calculated using phase 1 and phase 2 pre-charge periods of
-# 1 clock.
+# The times below are calculated using phase 1 and phase 2 pre-charge
+# periods of 1 clock.
 # Note that although the SSD1306 datasheet doesn't state it, the 50
-# clocks period per row _is_ a constant (datasheets for similar controllers from
-# the same manufacturer state this).
-# 530kHz is taken to be the highest nominal clock frequency. The calculations
-# shown provide the value in seconds, which can be multiplied by 1e6 to provide
-# a microsecond value.
-_Grayscale_pre_frame_time_us    = const( 785)     # 8 rows: ( 8*(1+1+50)) / 530e3 seconds
-_Grayscale_frame_time_us        = const(4709)     # 48 rows: (49*(1+1+50)) / 530e3 seconds
+# clocks period per row _is_ a constant (datasheets for similar
+# controllers from the same manufacturer state this).
+# 530kHz is taken to be the highest nominal clock frequency. The
+# calculations shown provide the value in seconds, which can be
+# multiplied by 1e6 to provide a microsecond value.
+_PRE_FRAME_TIME_US    = const( 785)     # 8 rows: ( 8*(1+1+50)) / 530e3 seconds
+_FRAME_TIME_US        = const(4709)     # 48 rows: (49*(1+1+50)) / 530e3 seconds
 
-_Grayscale_ThreadState_Starting   = const(0)
-_Grayscale_ThreadState_Stopped    = const(1)
-_Grayscale_ThreadState_Running    = const(2)
-_Grayscale_ThreadState_Stopping   = const(3)
+# Thread state variables for managing the Grayscale Thread
+_THREAD_STARTING   = const(0)
+_THREAD_STOPPED    = const(1)
+_THREAD_RUNNING    = const(2)
+_THREAD_STOPPING   = const(3)
 
-_Grayscale_StateIndex_State       = const(0)
-_Grayscale_StateIndex_CopyBuffs   = const(1)
-_Grayscale_StateIndex_PendingCmd  = const(2)
-_Grayscale_StateIndex_ContrastChng= const(3)
+# Indexes into the multipurpose state array, accessing a particular status
+_ST_THREAD       = const(0)
+_ST_COPY_BUFFS   = const(1)
+_ST_PENDING_CMD  = const(2)
+_ST_CONTRAST     = const(3)
 
 
 class Grayscale:
@@ -225,12 +225,12 @@ class Grayscale:
         self.fill(Grayscale.BLACK)
         self._copy_buffers()
         self.init_display()
-        self.state = _Grayscale_ThreadState_Starting
+        self.state = _THREAD_STARTING
         _thread.stack_size(2048)        # minimum stack size for RP2040 micropython port
         _thread.start_new_thread(self._display_thread, ())
 
         # Wait for the thread to successfully settle into a running state
-        while self._state[_Grayscale_StateIndex_State] != _Grayscale_ThreadState_Running:
+        while self._state[_ST_THREAD] != _THREAD_RUNNING:
             idle()
 
 
@@ -289,9 +289,9 @@ class Grayscale:
 
 
     def stop(self):
-        if self._state[_Grayscale_StateIndex_State] == _Grayscale_ThreadState_Running:
-            self._state[_Grayscale_StateIndex_State] = _Grayscale_ThreadState_Stopping
-            while self._state[_Grayscale_StateIndex_State] != _Grayscale_ThreadState_Stopped:
+        if self._state[_ST_THREAD] == _THREAD_RUNNING:
+            self._state[_ST_THREAD] = _THREAD_STOPPING
+            while self._state[_ST_THREAD] != _THREAD_STOPPED:
                 idle()
         self.cs(1)
         self.reset()
@@ -311,7 +311,7 @@ class Grayscale:
             cmd = bytearray(cmd)
         elif not cmd is bytearray:
             cmd = bytearray([cmd])
-        if self._state[_Grayscale_StateIndex_State] == _Grayscale_ThreadState_Running:
+        if self._state[_ST_THREAD] == _THREAD_RUNNING:
             pending_cmds = self.pending_cmds
             if len(cmd) > len(pending_cmds):
                 # We can't just break up the longer list of commands automatically, as we
@@ -326,8 +326,8 @@ class Grayscale:
             while i < len(pending_cmds):
                 pending_cmds[i] = 0x3e
                 i += 1
-            self._state[_Grayscale_StateIndex_PendingCmd] = 1
-            while self._state[_Grayscale_StateIndex_PendingCmd]:
+            self._state[_ST_PENDING_CMD] = 1
+            while self._state[_ST_PENDING_CMD]:
                 idle()
         else:
             self.dc(0)
@@ -341,15 +341,15 @@ class Grayscale:
     @micropython.viper
     def show(self):
         state:ptr32 = ptr32(self._state)
-        state[_Grayscale_StateIndex_CopyBuffs] = 1
-        if state[_Grayscale_StateIndex_State] != _Grayscale_ThreadState_Running:
+        state[_ST_COPY_BUFFS] = 1
+        if state[_ST_THREAD] != _THREAD_RUNNING:
             return
-        while state[_Grayscale_StateIndex_CopyBuffs] != 0:
+        while state[_ST_COPY_BUFFS] != 0:
             idle()
 
     @micropython.native
     def show_async(self):
-        self._state[_Grayscale_StateIndex_CopyBuffs] = 1
+        self._state[_ST_COPY_BUFFS] = 1
 
 
     @micropython.native
@@ -384,17 +384,17 @@ class Grayscale:
             c = 0
         elif c > 127:
             c = 127
-        self._state[_Grayscale_StateIndex_ContrastChng] = c
+        self._state[_ST_CONTRAST] = c
 
     def brightness_sync(self, c):
         if c < 0:
             c = 0
         elif c > 127:
             c = 127
-        self._state[_Grayscale_StateIndex_ContrastChng] = c
-        if self._state[_Grayscale_StateIndex_State] != _Grayscale_ThreadState_Running:
+        self._state[_ST_CONTRAST] = c
+        if self._state[_ST_THREAD] != _THREAD_RUNNING:
             return
-        while self._state[_Grayscale_StateIndex_ContrastChng] != 0xff:
+        while self._state[_ST_CONTRAST] != 0xff:
             idle()
 
     @micropython.viper
@@ -409,7 +409,7 @@ class Grayscale:
             _b2[i] = v2
             _b3[i] = v1 & v2
             i += 1
-        self._state[_Grayscale_StateIndex_CopyBuffs] = 0
+        self._state[_ST_COPY_BUFFS] = 0
 
 
     # GPU (Gray Processing Unit) thread function
@@ -438,9 +438,9 @@ class Grayscale:
         fn:int ; i:int ; t0:int
         v1:int ; v2:int ; contrast:int
 
-        state[_Grayscale_StateIndex_State] = _Grayscale_ThreadState_Running
+        state[_ST_THREAD] = _THREAD_RUNNING
         while True:
-            while state[_Grayscale_StateIndex_State] == _Grayscale_ThreadState_Running:
+            while state[_ST_THREAD] == _THREAD_RUNNING:
                 # this is the main GPU loop. We cycle through each of the 3 display
                 # framebuffers, sending the framebuffer data and various commands.
                 fn = 0
@@ -458,7 +458,7 @@ class Grayscale:
                     # send the first instance of the contrast adjust command
                     spi_write(post_frame_adj[fn])
                     # wait for the pre-frame time to complete
-                    sleep_us(_Grayscale_pre_frame_time_us - int(ticks_diff(ticks_us(), t0)))
+                    sleep_us(_PRE_FRAME_TIME_US - int(ticks_diff(ticks_us(), t0)))
                     t0 = ticks_us()
                     # now send the post-frame commands to display the frame
                     spi_write(post_frame_cmds)
@@ -468,7 +468,7 @@ class Grayscale:
                     # check if there's a pending frame copy required
                     # we only copy the paint framebuffers to the display framebuffers on
                     # the last frame to avoid screen-tearing artefacts
-                    if (fn == 2) and (state[_Grayscale_StateIndex_CopyBuffs] != 0):
+                    if (fn == 2) and (state[_ST_COPY_BUFFS] != 0):
                         i = 0
                         # fast copy loop. By using using ptr32 vars we copy 3 bytes at a time.
                         while i < 90:
@@ -484,30 +484,30 @@ class Grayscale:
                             _b2[i] = v2
                             _b3[i] = v1 & v2
                             i += 1
-                        state[_Grayscale_StateIndex_CopyBuffs] = 0
+                        state[_ST_COPY_BUFFS] = 0
                     # check if there's a pending contrast/brightness value change
                     # again, we only adjust this after the last frame in the cycle
-                    elif (fn == 2) and (state[_Grayscale_StateIndex_ContrastChng] != 0xffff):
-                        contrast = state[_Grayscale_StateIndex_ContrastChng]
-                        state[_Grayscale_StateIndex_ContrastChng] = 0xffff
+                    elif (fn == 2) and (state[_ST_CONTRAST] != 0xffff):
+                        contrast = state[_ST_CONTRAST]
+                        state[_ST_CONTRAST] = 0xffff
                         # shift the value to provide 3 different levels
                         post_frame_adj[0][1] = contrast >> 5
                         post_frame_adj[1][1] = contrast >> 1
                         post_frame_adj[2][1] = (contrast << 1) + 1
                     # check if there are pending commands
-                    elif state[_Grayscale_StateIndex_PendingCmd]:
+                    elif state[_ST_PENDING_CMD]:
                         # and send them
                         spi_write(pending_cmds)
-                        state[_Grayscale_StateIndex_PendingCmd] = 0
+                        state[_ST_PENDING_CMD] = 0
                     # two stage wait for frame time to complete
                     # we use sleep_ms() first to allow idle loop usage, with >>10 for a fast
                     # /1000 approximation
-                    sleep_ms((_Grayscale_frame_time_us - int(ticks_diff(ticks_us(), t0))) >> 10)
+                    sleep_ms((_FRAME_TIME_US - int(ticks_diff(ticks_us(), t0))) >> 10)
                     # and finish with a sleep_us() to spin for the correct duration
-                    sleep_us(_Grayscale_frame_time_us - int(ticks_diff(ticks_us(), t0)))
+                    sleep_us(_FRAME_TIME_US - int(ticks_diff(ticks_us(), t0)))
                     fn += 1
             # if the state has changed to 'stopping'
-            if state[_Grayscale_StateIndex_State] == _Grayscale_ThreadState_Stopping:
+            if state[_ST_THREAD] == _THREAD_STOPPING:
                 i = 0
                 # blank out framebuffer 1
                 while i < 90:
@@ -517,7 +517,7 @@ class Grayscale:
                 # and send it to clear the screen
                 spi_write(buffers[0])
                 # and mark that we've stopped
-                state[_Grayscale_StateIndex_State] = _Grayscale_ThreadState_Stopped
+                state[_ST_THREAD] = _THREAD_STOPPED
                 # the thread can now exit
                 return
 
