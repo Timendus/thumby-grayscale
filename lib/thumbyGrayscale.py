@@ -119,6 +119,12 @@ _ST_COPY_BUFFS   = const(1)
 _ST_PENDING_CMD  = const(2)
 _ST_CONTRAST     = const(3)
 
+# Screen display size constants
+_WIDTH = const(72)
+_HEIGHT = const(40)
+_BUFF_SIZE = const((_HEIGHT // 8) * _WIDTH)
+_BUFF_INT_SIZE = const(_BUFF_SIZE // 4)
+
 
 class Grayscale:
 
@@ -141,18 +147,17 @@ class Grayscale:
         self._dc.init(Pin.OUT, value=0)
         self._cs.init(Pin.OUT, value=1)
 
-        self.width = 72
-        self.height = 40
-        self.max_x = 72 - 1
-        self.max_y = 40 - 1
+        self.width = _WIDTH
+        self.height = _HEIGHT
+        self.max_x = _WIDTH - 1
+        self.max_y = _HEIGHT - 1
 
         self.pages = self.height // 8
-        self.buffer_size = self.pages * self.width
-        self.buffer1 = bytearray(self.buffer_size)
-        self.buffer2 = bytearray(self.buffer_size)
-        self._buffer1 = bytearray(self.buffer_size)
-        self._buffer2 = bytearray(self.buffer_size)
-        self._buffer3 = bytearray(self.buffer_size)
+        self.buffer1 = bytearray(_BUFF_SIZE)
+        self.buffer2 = bytearray(_BUFF_SIZE)
+        self._buffer1 = bytearray(_BUFF_SIZE)
+        self._buffer2 = bytearray(_BUFF_SIZE)
+        self._buffer3 = bytearray(_BUFF_SIZE)
 
         # The method used to create reduced flicker greyscale using the SSD1306
         # uses certain assumptions about the internal behaviour of the
@@ -188,7 +193,7 @@ class Grayscale:
         # 0xd3,x    Set display offset. Since rows are scanned in reverse, the
         #           calculation must work backwards from the last controller row.
         # 0xa8,57-1 Set multiplex ratio to 57
-        self._postFrameCmds = bytearray([0xd3,40+(64-57), 0xa8,57-1])
+        self._postFrameCmds = bytearray([0xd3,_HEIGHT+(64-57), 0xa8,57-1])
 
         # We enhance the greys by modulating the contrast.
         # Use setting from thumby.cfg
@@ -402,7 +407,7 @@ class Grayscale:
         b1:ptr32 = ptr32(self.buffer1) ; b2:ptr32 = ptr32(self.buffer2)
         _b1:ptr32 = ptr32(self._buffer1) ; _b2:ptr32 = ptr32(self._buffer2) ; _b3:ptr32 = ptr32(self._buffer3)
         i:int = 0
-        while i < 90:
+        while i < _BUFF_INT_SIZE:
             v1:int = b1[i]
             v2:int = b2[i]
             _b1[i] = v1 | v2
@@ -471,7 +476,7 @@ class Grayscale:
                     if (fn == 2) and (state[_ST_COPY_BUFFS] != 0):
                         i = 0
                         # fast copy loop. By using using ptr32 vars we copy 3 bytes at a time.
-                        while i < 90:
+                        while i < _BUFF_INT_SIZE:
                             v1 = b1[i]
                             v2 = b2[i]
                             # this isn't a straight copy. Instead we are mapping:
@@ -510,7 +515,7 @@ class Grayscale:
             if state[_ST_THREAD] == _THREAD_STOPPING:
                 i = 0
                 # blank out framebuffer 1
-                while i < 90:
+                while i < _BUFF_INT_SIZE:
                     _b1[i] = 0
                     i += 1
                 dc(1)
@@ -529,15 +534,15 @@ class Grayscale:
         f1:int = -1 if colour & 1 else 0
         f2:int = -1 if colour & 2 else 0
         i:int = 0
-        while i < 90:
+        while i < _BUFF_INT_SIZE:
             buffer1[i] = f1
             buffer2[i] = f2
             i += 1
 
     @micropython.viper
     def drawFilledRectangle(self, x:int, y:int, width:int, height:int, colour:int):
-        if x > 71: return
-        if y > 39: return
+        if x >= _WIDTH: return
+        if y >= _HEIGHT: return
         if width <= 0: return
         if height <= 0: return
         if x < 0:
@@ -548,20 +553,20 @@ class Grayscale:
             y = 0
         x2:int = x + width
         y2:int = y + height
-        if x2 > 72:
-            x2 = 72
-            width = 72 - x
-        if y2 > 40:
-            y2 = 40
-            height = 40 - y
+        if x2 > _WIDTH:
+            x2 = _WIDTH
+            width = _WIDTH - x
+        if y2 > _HEIGHT:
+            y2 = _HEIGHT
+            height = _HEIGHT - y
 
         buffer1 = ptr8(self.buffer1)
         buffer2 = ptr8(self.buffer2)
 
-        o:int = (y >> 3) * 72
+        o:int = (y >> 3) * _WIDTH
         oe:int = o + x2
         o += x
-        strd:int = 72 - width
+        strd:int = _WIDTH - width
 
         v1:int = 0xff if colour & 1 else 0
         v2:int = 0xff if colour & 2 else 0
@@ -586,7 +591,7 @@ class Grayscale:
         height -= ybh
         while height >= 8:
             o += strd
-            oe += 72
+            oe += _WIDTH
             while o < oe:
                 buffer1[o] = v1
                 buffer2[o] = v2
@@ -594,7 +599,7 @@ class Grayscale:
             height -= 8
         if height > 0:
             o += strd
-            oe += 72
+            oe += _WIDTH
             m:int = (1 << height) - 1
             im:int = 255-m
             while o < oe:
@@ -612,16 +617,16 @@ class Grayscale:
 
     @micropython.viper
     def drawHLine(self, x:int, y:int, width:int, colour:int):
-        if y < 0 or y >= 40: return
-        if x >= 72: return
+        if y < 0 or y >= _HEIGHT: return
+        if x >= _WIDTH: return
         if width <= 0: return
         if x < 0:
             width += x
             x = 0
         x2:int = x + width
-        if x2 > 72:
-            x2 = 72
-        o:int = (y >> 3) * 72
+        if x2 > _WIDTH:
+            x2 = _WIDTH
+        o:int = (y >> 3) * _WIDTH
         oe:int = o + x2
         o += x
         m:int = 1 << (y & 7)
@@ -652,19 +657,19 @@ class Grayscale:
 
     @micropython.viper
     def drawVLine(self, x:int, y:int, height:int, colour:int):
-        if x < 0 or x >= 72: return
-        if y >= 40: return
+        if x < 0 or x >= _WIDTH: return
+        if y >= _HEIGHT: return
         if height <= 0: return
         if y < 0:
             height += y
             y = 0
-        if (y + height) > 40:
-            height = 40 - y
+        if (y + height) > _HEIGHT:
+            height = _HEIGHT - y
 
         buffer1 = ptr8(self.buffer1)
         buffer2 = ptr8(self.buffer2)
 
-        o:int = (y >> 3) * 72 + x
+        o:int = (y >> 3) * _WIDTH + x
 
         v1:int = 0xff if colour & 1 else 0
         v2:int = 0xff if colour & 2 else 0
@@ -686,12 +691,12 @@ class Grayscale:
             buffer2[o] &= im
         height -= ybh
         while height >= 8:
-            o += 72
+            o += _WIDTH
             buffer1[o] = v1
             buffer2[o] = v2
             height -= 8
         if height > 0:
-            o += 72
+            o += _WIDTH
             m:int = (1 << height) - 1
             im:int = 255-m
             if colour & 1:
@@ -714,9 +719,9 @@ class Grayscale:
 
     @micropython.viper
     def setPixel(self, x:int, y:int, colour:int):
-        if x < 0 or x >= 72 or y < 0 or y >= 40:
+        if x < 0 or x >= _WIDTH or y < 0 or y >= _HEIGHT:
             return
-        o:int = (y >> 3) * 72 + x
+        o:int = (y >> 3) * _WIDTH + x
         m:int = 1 << (y & 7)
         im:int = 255-m
         buffer1 = ptr8(self.buffer1)
@@ -732,9 +737,9 @@ class Grayscale:
 
     @micropython.viper
     def getPixel(self, x:int, y:int) -> int:
-        if x < 0 or x >= 72 or y < 0 or y >= 40:
+        if x < 0 or x >= _WIDTH or y < 0 or y >= _HEIGHT:
             return 0
-        o:int = (y >> 3) * 72 + x
+        o:int = (y >> 3) * _WIDTH + x
         m:int = 1 << (y & 7)
         buffer1 = ptr8(self.buffer1)
         buffer2 = ptr8(self.buffer2)
@@ -774,14 +779,14 @@ class Grayscale:
         buffer2:ptr8 = ptr8(self.buffer2)
         cx:int ; o:int
 
-        o:int = (y >> 3) * 72 + x
+        o:int = (y >> 3) * _WIDTH + x
         m:int = 1 << (y & 7)
         im:int = 255-m
 
         if dx > dy:
             err:int = dx >> 1
             while x != x1:
-                if 0 <= x < 72 and 0 <= y < 40:
+                if 0 <= x < _WIDTH and 0 <= y < _HEIGHT:
                     if colour & 1:
                         buffer1[o] |= m
                     else:
@@ -795,7 +800,7 @@ class Grayscale:
                     y += 1
                     m <<= 1
                     if m & 0x100:
-                        o += 72
+                        o += _WIDTH
                         m = 1
                         im = 0xfe
                     else:
@@ -806,7 +811,7 @@ class Grayscale:
         else:
             err:int = dy >> 1
             while y != y1:
-                if 0 <= x < 72 and 0 <= y < 40:
+                if 0 <= x < _WIDTH and 0 <= y < _HEIGHT:
                     if colour & 1:
                         buffer1[o] |= m
                     else:
@@ -823,12 +828,12 @@ class Grayscale:
                 y += 1
                 m <<= 1
                 if m & 0x100:
-                    o += 72
+                    o += _WIDTH
                     m = 1
                     im = 0xfe
                 else:
                     im = 255-m
-        if 0 <= x < 72 and 0 <= y < 40:
+        if 0 <= x < _WIDTH and 0 <= y < _HEIGHT:
             if colour & 1:
                 buffer1[o] |= m
             else:
@@ -863,8 +868,8 @@ class Grayscale:
         sm1a:int = 255 - sm1o
         sm2o:int = 0xff if colour & 2 else 0
         sm2a:int = 255 - sm2o
-        ou:int = (y >> 3) * 72 + x
-        ol:int = ou + 72
+        ou:int = (y >> 3) * _WIDTH + x
+        ol:int = ou + _WIDTH
         shu:int = y & 7
         shl:int = 8 - shu
         for c in txt:
@@ -876,7 +881,7 @@ class Grayscale:
                 gi:int = co * font_width
                 gx:int = 0
                 while gx < font_width:
-                    if 0 <= x < 72:
+                    if 0 <= x < _WIDTH:
                         gb:int = font_bmap[gi + gx]
                         gbu:int = gb << shu
                         gbl:int = gb >> shl
@@ -899,9 +904,9 @@ class Grayscale:
 
     @micropython.viper
     def blit(self, src1:ptr8, src2:ptr8, x:int, y:int, width:int, height:int, key:int, mirrorX:int, mirrorY:int):
-        if x+width < 0 or x >= 72:
+        if x+width < 0 or x >= _WIDTH:
             return
-        if y+height < 0 or y >= 40:
+        if y+height < 0 or y >= _HEIGHT:
             return
         buffer1:ptr8 = ptr8(self.buffer1)
         buffer2:ptr8 = ptr8(self.buffer2)
@@ -923,8 +928,8 @@ class Grayscale:
                 srcx = 0 - dstx
                 width += dstx
                 dstx = 0
-        if dstx+width > 72:
-            width = 72 - dstx
+        if dstx+width > _WIDTH:
+            width = _WIDTH - dstx
         if mirrorY:
             srcy = height - 1
             if dsty < 0:
@@ -936,13 +941,13 @@ class Grayscale:
                 srcy = 0 - dsty
                 height += dsty
                 dsty = 0
-        if dsty+height > 40:
-            height = 40 - dsty
+        if dsty+height > _HEIGHT:
+            height = _HEIGHT - dsty
 
         srco:int = (srcy >> 3) * stride + srcx
         srcm:int = 1 << (srcy & 7)
 
-        dsto:int = (dsty >> 3) * 72 + dstx
+        dsto:int = (dsty >> 3) * _WIDTH + dstx
         dstm:int = 1 << (dsty & 7)
         dstim:int = 255 - dstm
 
@@ -970,7 +975,7 @@ class Grayscale:
                 i -= 1
             dstm <<= 1
             if dstm & 0x100:
-                dsto += 72
+                dsto += _WIDTH
                 dstm = 1
                 dstim = 0xfe
             else:
@@ -993,9 +998,9 @@ class Grayscale:
 
     @micropython.viper
     def blitWithMask(self, src1:ptr8, src2:ptr8, x:int, y:int, width:int, height:int, key:int, mirrorX:int, mirrorY:int, mask:ptr8):
-        if x+width < 0 or x >= 72:
+        if x+width < 0 or x >= _WIDTH:
             return
-        if y+height < 0 or y >= 40:
+        if y+height < 0 or y >= _HEIGHT:
             return
         buffer1:ptr8 = ptr8(self.buffer1)
         buffer2:ptr8 = ptr8(self.buffer2)
@@ -1017,8 +1022,8 @@ class Grayscale:
                 srcx = 0 - dstx
                 width += dstx
                 dstx = 0
-        if dstx+width > 72:
-            width = 72 - dstx
+        if dstx+width > _WIDTH:
+            width = _WIDTH - dstx
         if mirrorY:
             srcy = height - 1
             if dsty < 0:
@@ -1030,13 +1035,13 @@ class Grayscale:
                 srcy = 0 - dsty
                 height += dsty
                 dsty = 0
-        if dsty+height > 40:
-            height = 40 - dsty
+        if dsty+height > _HEIGHT:
+            height = _HEIGHT - dsty
 
         srco:int = (srcy >> 3) * stride + srcx
         srcm:int = 1 << (srcy & 7)
 
-        dsto:int = (dsty >> 3) * 72 + dstx
+        dsto:int = (dsty >> 3) * _WIDTH + dstx
         dstm:int = 1 << (dsty & 7)
         dstim:int = 255 - dstm
 
@@ -1059,7 +1064,7 @@ class Grayscale:
                 i -= 1
             dstm <<= 1
             if dstm & 0x100:
-                dsto += 72
+                dsto += _WIDTH
                 dstm = 1
                 dstim = 0xfe
             else:
