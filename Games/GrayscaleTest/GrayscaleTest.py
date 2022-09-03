@@ -13,11 +13,11 @@ from thumbyButton import actionPressed
 from machine import reset
 from time import sleep_ms
 from utime import ticks_us, sleep_us, ticks_diff
-from thumbyGrayscale import Grayscale, Sprite
+from thumbyGrayscale import display, Sprite
 
 # Initialization
 
-gs = Grayscale()
+gs = display
 
 # Helper function
 
@@ -117,9 +117,9 @@ while True:
     cat.x += dx
     cat.y += dy
     if cat.x == 0 or cat.x == 60:
-        dx = -1 * dx
+        dx = -dx
     if cat.y == 0 or cat.y == 31:
-        dy = -1 * dy
+        dy = -dy
     gs.update()
     sleep_ms(50)
 

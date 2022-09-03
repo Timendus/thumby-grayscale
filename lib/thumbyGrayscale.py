@@ -1,42 +1,11 @@
 import micropython
-import utime
+from utime import sleep_ms, ticks_diff, ticks_ms, sleep_us
 from machine import Pin, SPI, freq, idle
 import _thread
-import os
+from os import stat
 import gc
 from array import array
-try:
-    from thumbyButton import buttonA, buttonB, buttonU, buttonD, buttonL, buttonR
-except:
-    # this will fail on Thumbys that have not been updated, but that's ok as we
-    # won't run anyway.
-    pass
-
-
-# When the Thumby boots up, it runs at 48MHz. main.py will switch this to 125MHz
-# before starting a game, but anything run in the code editor will be running at
-# the slower frequency. We want a bit of grunt for the GPU loop so we'll raise it
-# to at least 125MHz here.
-# We'll assume that if this code has been imported, then the greyscale display
-# code is going to be used and go ahead and change the frequency now. The
-# alternative is to wait until object creation time, but prior to that other
-# objects could have been instantiated that rely on knowing what the runtime CPU
-# frequency will be.
-if freq() < 125000000:
-    freq(125000000)
-
-
-def check_upython_version(major, minor, release):
-    up_ver = [int(s) for s in os.uname().release.split('.')]
-    if up_ver[0] > major:
-        return True
-    if up_ver[0] == major:
-        if up_ver[1] > minor:
-            return True
-        if up_ver[1] == minor:
-            if up_ver[2] >= release:
-                return True
-    return False
+from thumbyButton import buttonA, buttonB, buttonU, buttonD, buttonL, buttonR
 
 
 class Sprite:
@@ -55,7 +24,7 @@ class Sprite:
             self.bitmap = bytearray(self.bitmapByteCount1)
             self.file1 = open(self.bitmapSource1,'rb')
             self.file1.readinto(self.bitmap1)
-            self.frameCount = os.stat(self.bitmapSource1)[6] // self.bitmapByteCount
+            self.frameCount = stat(self.bitmapSource1)[6] // self.bitmapByteCount
         elif type(self.bitmapSource1)==bytearray:
             self.bitmap1 = memoryview(self.bitmapSource1)[0:self.bitmapByteCount]
             self.frameCount = len(self.bitmapSource1) // self.bitmapByteCount
@@ -63,7 +32,7 @@ class Sprite:
             self.bitmap2 = bytearray(self.bitmapByteCount)
             self.file2 = open(self.bitmapSource2,'rb')
             self.file2.readinto(self.bitmap2)
-            assert(self.frameCount == os.stat(self.bitmapSource2)[6] // self.bitmapByteCount)
+            assert(self.frameCount == stat(self.bitmapSource2)[6] // self.bitmapByteCount)
         elif type(self.bitmapSource2)==bytearray:
             self.bitmap2 = memoryview(self.bitmapSource2)[0:self.bitmapByteCount]
             assert(self.frameCount == len(self.bitmapSource2) // self.bitmapByteCount)
@@ -134,9 +103,6 @@ class Grayscale:
     WHITE     = 3
 
     def __init__(self):
-        if not check_upython_version(1, 19, 1):
-            raise NotImplementedError('Greyscale support requires at least Micropython v1.19.1. Please update via the Thumby code editor')
-
         self._spi = SPI(0, sck=Pin(18), mosi=Pin(19))
         self._dc = Pin(17)
         self._cs = Pin(16)
@@ -146,6 +112,8 @@ class Grayscale:
         self._res.init(Pin.OUT, value=1)
         self._dc.init(Pin.OUT, value=0)
         self._cs.init(Pin.OUT, value=1)
+
+        self.display = self     # This acts as both the GraphicsClass and SSD1306
 
         self.width = _WIDTH
         self.height = _HEIGHT
@@ -221,11 +189,9 @@ class Grayscale:
         self._pendingCmds = bytearray([0] * 8)
 
         self.setFont('lib/font5x7.bin', 5, 7, 1)
-        #self.setFont('lib/font8x8.bin', 8, 8, 0)
 
         self.lastUpdateEnd = 0
         self.frameRate = 0
-        self.frameTimeMs = 0
 
         self.fill(Grayscale.BLACK)
         self._copy_buffers()
@@ -248,11 +214,11 @@ class Grayscale:
 
     def reset(self):
         self._res(1)
-        utime.sleep_ms(1)
+        sleep_ms(1)
         self._res(0)
-        utime.sleep_ms(10)
+        sleep_ms(10)
         self._res(1)
-        utime.sleep_ms(10)
+        sleep_ms(10)
 
 
     def init_display(self):
@@ -360,16 +326,14 @@ class Grayscale:
     @micropython.native
     def setFPS(self, newFrameRate):
         self.frameRate = newFrameRate
-        if newFrameRate != 0:
-            self.frameTimeMs = 1000 // newFrameRate
 
     @micropython.native
     def update(self):
         self.show()
         if self.frameRate > 0:
-            frameTimeMs = self.frameTimeMs
+            frameTimeMs = 1000 // self.frameRate
             lastUpdateEnd = self.lastUpdateEnd
-            frameTimeRemaining = frameTimeMs - utime.ticks_diff(utime.ticks_ms(), lastUpdateEnd)
+            frameTimeRemaining = frameTimeMs - ticks_diff(ticks_ms(), lastUpdateEnd)
             while frameTimeRemaining > 1:
                 buttonA.update()
                 buttonB.update()
@@ -377,11 +341,11 @@ class Grayscale:
                 buttonD.update()
                 buttonL.update()
                 buttonR.update()
-                utime.sleep_ms(1)
-                frameTimeRemaining = frameTimeMs - utime.ticks_diff(utime.ticks_ms(), lastUpdateEnd)
+                sleep_ms(1)
+                frameTimeRemaining = frameTimeMs - ticks_diff(ticks_ms(), lastUpdateEnd)
             while frameTimeRemaining > 0:
-                frameTimeRemaining = frameTimeMs - utime.ticks_diff(utime.ticks_ms(), lastUpdateEnd)
-        self.lastUpdateEnd = utime.ticks_ms()
+                frameTimeRemaining = frameTimeMs - ticks_diff(ticks_ms(), lastUpdateEnd)
+        self.lastUpdateEnd = ticks_ms()
 
 
     def brightness(self, c):
@@ -429,10 +393,6 @@ class Grayscale:
         dc = self._dc
         preFrameCmds = self._preFrameCmds
         postFrameCmds = self._postFrameCmds
-        ticks_us = utime.ticks_us
-        ticks_diff = utime.ticks_diff
-        sleep_ms = utime.sleep_ms
-        sleep_us = utime.sleep_us
 
         # we want ptr32 vars for fast buffer copying
         b1 = ptr32(self.buffer1) ; b2 = ptr32(self.buffer2)
@@ -840,7 +800,7 @@ class Grayscale:
 
 
     def setFont(self, fontFile, width, height, space):
-        sz = os.stat(fontFile)[6]
+        sz = stat(fontFile)[6]
         self.font_bmap = bytearray(sz)
         with open(fontFile, 'rb') as fh:
             fh.readinto(self.font_bmap)
@@ -1078,3 +1038,5 @@ class Grayscale:
     @micropython.native
     def drawSpriteWithMask(self, s, m):
         self.blit(s.bitmap1, s.bitmap2, s.x, s.y, s.width, s.height, s.key, s.mirrorX, s.mirrorY, m.bitmap1)
+
+display = Grayscale()
