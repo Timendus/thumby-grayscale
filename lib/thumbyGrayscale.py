@@ -1,11 +1,17 @@
 import micropython
 from utime import sleep_ms, ticks_diff, ticks_ms, sleep_us
-from machine import Pin, SPI, freq, idle
+from machine import Pin, SPI, freq, idle, mem32
 import _thread
 from os import stat
 import gc
 from array import array
 from thumbyButton import buttonA, buttonB, buttonU, buttonD, buttonL, buttonR
+
+emulator = None
+try:
+    import emulator
+except ImportError:
+    pass
 
 
 class Sprite:
@@ -206,7 +212,9 @@ class Grayscale:
 
         self.lastUpdateEnd = 0
         self.frameRate = 0
+
         self.brightness(self._brightness)
+        self._initEmuScreen()
 
         _thread.stack_size(2048)        # minimum stack size for RP2040 micropython port
 
@@ -218,6 +226,26 @@ class Grayscale:
         return self
     def __exit__(self, type, value, traceback):
         self.disableGrayscale()
+
+
+    @micropython.viper
+    def _initEmuScreen(self):
+        if not emulator:
+            return
+        # Register draw buffer with emulator
+        Pin(2, Pin.OUT) # Ready display handshake pin
+        emulator.screen_breakpoint(ptr16(self.drawBuffer))
+        self._clearEmuFunctions()
+
+    def _clearEmuFunctions(self):
+        # Disable device controller functions
+        def _disabled(*arg, **kwdarg):
+            pass
+        self.reset = _disabled
+        self.poweron = _disabled
+        self.poweroff = _disabled
+        self.init_display = _disabled
+        self.write_cmd = _disabled
 
 
     def reset(self):
@@ -290,6 +318,12 @@ class Grayscale:
 
 
     def enableGrayscale(self):
+        if emulator:
+            # Activate grayscale emulation
+            emulator.screen_breakpoint(1)
+            self.show()
+            return
+
         if self._state[_ST_THREAD] == _THREAD_RUNNING:
             return
 
@@ -303,6 +337,12 @@ class Grayscale:
 
 
     def disableGrayscale(self):
+        if emulator:
+            # Disable grayscale emulation
+            emulator.screen_breakpoint(0)
+            self.show()
+            return
+
         if self._state[_ST_THREAD] != _THREAD_RUNNING:
             return
         self._state[_ST_THREAD] = _THREAD_STOPPING
@@ -355,6 +395,8 @@ class Grayscale:
             state[_ST_COPY_BUFFS] = 1
             while state[_ST_COPY_BUFFS] != 0:
                 idle()
+        elif emulator:
+            mem32[0xD0000000+0x01C] = 1 << 2
         else:
             self._dc(1)
             self._spi.write(self.buffer)
@@ -404,7 +446,7 @@ class Grayscale:
         postFrameAdjSrc[0] = c >> 5
         postFrameAdjSrc[1] = c >> 1
         postFrameAdjSrc[2] = (c << 1) + 1
-        # Apply to display or GPU
+        # Apply to display, GPU, and emulator
         if state[_ST_THREAD] == _THREAD_RUNNING:
             state[_ST_CONTRAST] = 1
         else:
@@ -412,8 +454,11 @@ class Grayscale:
             postFrameAdj[0][1] = postFrameAdjSrc[0]
             postFrameAdj[1][1] = postFrameAdjSrc[1]
             postFrameAdj[2][1] = postFrameAdjSrc[2]
-            # Apply the contrast directly to the display
-            self.write_cmd([0x81, c])
+            # Apply the contrast directly to the display or emulator
+            if emulator:
+                emulator.brightness_breakpoint(c)
+            else:
+                self.write_cmd([0x81, c])
         setattr(self, '_brightness', c)
 
 
