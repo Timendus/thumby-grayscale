@@ -517,12 +517,11 @@ class Grayscale:
             shading[i] = f2
             i += 1
 
+
     @micropython.viper
     def drawFilledRectangle(self, x:int, y:int, width:int, height:int, colour:int):
-        if x >= _WIDTH: return
-        if y >= _HEIGHT: return
-        if width <= 0: return
-        if height <= 0: return
+        if x >= _WIDTH or y >= _HEIGHT: return
+        if width <= 0 or height <= 0: return
         if x < 0:
             width += x
             x = 0
@@ -546,8 +545,10 @@ class Grayscale:
         o += x
         strd = _WIDTH - width
 
-        v1 = 0xff if colour & 1 else 0
-        v2 = 0xff if colour & 2 else 0
+        c1 = colour & 1
+        c2 = colour & 2
+        v1 = 0xff if c1 else 0
+        v2 = 0xff if c2 else 0
 
         yb = y & 7
         ybh = 8 - yb
@@ -557,11 +558,11 @@ class Grayscale:
             m = 0xff << yb
         im = 255-m
         while o < oe:
-            if colour & 1:
+            if c1:
                 buffer[o] |= m
             else:
                 buffer[o] &= im
-            if colour & 2:
+            if c2:
                 shading[o] |= m
             else:
                 shading[o] &= im
@@ -581,118 +582,24 @@ class Grayscale:
             m = (1 << height) - 1
             im = 255-m
             while o < oe:
-                if colour & 1:
+                if c1:
                     buffer[o] |= m
                 else:
                     buffer[o] &= im
-                if colour & 2:
+                if c2:
                     shading[o] |= m
                 else:
                     shading[o] &= im
                 o += 1
 
 
-
-    @micropython.viper
-    def drawHLine(self, x:int, y:int, width:int, colour:int):
-        if y < 0 or y >= _HEIGHT: return
-        if x >= _WIDTH: return
-        if width <= 0: return
-        if x < 0:
-            width += x
-            x = 0
-        x2 = x + width
-        if x2 > _WIDTH:
-            x2 = _WIDTH
-        o = (y >> 3) * _WIDTH
-        oe = o + x2
-        o += x
-        m = 1 << (y & 7)
-        im = 255-m
-        buffer = ptr8(self.buffer)
-        shading = ptr8(self.shading)
-        if colour == 0:
-            while o < oe:
-                buffer[o] &= im
-                shading[o] &= im
-                o += 1
-        elif colour == 1:
-            while o < oe:
-                buffer[o] |= m
-                shading[o] &= im
-                o += 1
-        elif colour == 2:
-            while o < oe:
-                buffer[o] &= im
-                shading[o] |= m
-                o += 1
-        elif colour == 3:
-            while o < oe:
-                buffer[o] |= m
-                shading[o] |= m
-                o += 1
-
-
-    @micropython.viper
-    def drawVLine(self, x:int, y:int, height:int, colour:int):
-        if x < 0 or x >= _WIDTH: return
-        if y >= _HEIGHT: return
-        if height <= 0: return
-        if y < 0:
-            height += y
-            y = 0
-        if (y + height) > _HEIGHT:
-            height = _HEIGHT - y
-
-        buffer = ptr8(self.buffer)
-        shading = ptr8(self.shading)
-
-        o = (y >> 3) * _WIDTH + x
-
-        v1 = 0xff if colour & 1 else 0
-        v2 = 0xff if colour & 2 else 0
-
-        yb = y & 7
-        ybh = 8 - yb
-        if height <= ybh:
-            m = ((1 << height) - 1) << yb
-        else:
-            m = 0xff << yb
-        im = 255-m
-        if colour & 1:
-            buffer[o] |= m
-        else:
-            buffer[o] &= im
-        if colour & 2:
-            shading[o] |= m
-        else:
-            shading[o] &= im
-        height -= ybh
-        while height >= 8:
-            o += _WIDTH
-            buffer[o] = v1
-            shading[o] = v2
-            height -= 8
-        if height > 0:
-            o += _WIDTH
-            m = (1 << height) - 1
-            im = 255-m
-            if colour & 1:
-                buffer[o] |= m
-            else:
-                buffer[o] &= im
-            if colour & 2:
-                shading[o] |= m
-            else:
-                shading[o] &= im
-
-
     @micropython.viper
     def drawRectangle(self, x:int, y:int, width:int, height:int, colour:int):
-        self.drawHLine(x, y, width, colour)
-        self.drawHLine(x, y+height-1, width, colour)
-        self.drawVLine(x, y, height, colour)
-        self.drawVLine(x+width-1, y, height, colour)
+        dfr = self.drawFilledRectangle
+        dfr(x, y, width, 1, colour)
+        dfr(x, y, 1, height, colour)
+        dfr(x, y+height-1, width, 1, colour)
+        dfr(x+width-1, y, 1, height, colour)
 
 
     @micropython.viper
@@ -731,13 +638,10 @@ class Grayscale:
     @micropython.viper
     def drawLine(self, x0:int, y0:int, x1:int, y1:int, colour:int):
         if x0 == x1:
-            if y0 == y1:
-                self.setPixel(x0, y0, colour)
-            else:
-                self.drawHLine(x0, y0, x1-x0, colour)
+            self.drawFilledRectangle(x0, y0, 1, y1 - y0, colour)
             return
         if y0 == y1:
-            self.drawVLine(x0, y0, y1-y0, colour)
+            self.drawFilledRectangle(x0, y0, x1 - x0, 1, colour)
             return
         dx = x1 - x0
         dy = y1 - y0
@@ -759,16 +663,19 @@ class Grayscale:
         o = (y >> 3) * _WIDTH + x
         m = 1 << (y & 7)
         im = 255-m
+        c1 = colour & 1
+        c2 = colour & 2
 
         if dx > dy:
             err = dx >> 1
+            x1 += 1
             while x != x1:
                 if 0 <= x < _WIDTH and 0 <= y < _HEIGHT:
-                    if colour & 1:
+                    if c1:
                         buffer[o] |= m
                     else:
                         buffer[o] &= im
-                    if colour & 2:
+                    if c2:
                         shading[o] |= m
                     else:
                         shading[o] &= im
@@ -787,13 +694,14 @@ class Grayscale:
                 o += sx
         else:
             err = dy >> 1
+            y1 += 1
             while y != y1:
                 if 0 <= x < _WIDTH and 0 <= y < _HEIGHT:
-                    if colour & 1:
+                    if c1:
                         buffer[o] |= m
                     else:
                         buffer[o] &= im
-                    if colour & 2:
+                    if c2:
                         shading[o] |= m
                     else:
                         shading[o] &= im
@@ -810,15 +718,6 @@ class Grayscale:
                     im = 0xfe
                 else:
                     im = 255-m
-        if 0 <= x < _WIDTH and 0 <= y < _HEIGHT:
-            if colour & 1:
-                buffer[o] |= m
-            else:
-                buffer[o] &= im
-            if colour & 2:
-                shading[o] |= m
-            else:
-                shading[o] &= im
 
 
 
@@ -834,7 +733,7 @@ class Grayscale:
 
 
     @micropython.viper
-    def drawText(self, txt, x:int, y:int, colour:int):
+    def drawText(self, stringToPrint, x:int, y:int, colour:int):
         buffer = ptr8(self.buffer)
         shading = ptr8(self.shading)
         font_bmap = ptr8(self.font_bmap)
@@ -849,7 +748,7 @@ class Grayscale:
         ol = ou + _WIDTH
         shu = y & 7
         shl = 8 - shu
-        for c in txt:
+        for c in memoryview(stringToPrint):
             if isinstance(c, str):
                 co = int(ord(c)) - 0x20
             else:
@@ -862,11 +761,11 @@ class Grayscale:
                         gb = font_bmap[gi + gx]
                         gbu = gb << shu
                         gbl = gb >> shl
-                        if 0 <= ou < 360:
+                        if 0 <= ou < _BUFF_SIZE:
                             # paint upper byte
                             buffer[ou] = (buffer[ou] | (gbu & sm1o)) & 255-(gbu & sm1a)
                             shading[ou] = (shading[ou] | (gbu & sm2o)) & 255-(gbu & sm2a)
-                        if (shl != 8) and (0 <= ol < 360):
+                        if (shl != 8) and (0 <= ol < _BUFF_SIZE):
                             # paint lower byte
                             buffer[ol] = (buffer[ol] | (gbl & sm1o)) & 255-(gbl & sm1a)
                             shading[ol] = (shading[ol] | (gbl & sm2o)) & 255-(gbl & sm2a)
