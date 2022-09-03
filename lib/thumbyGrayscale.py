@@ -97,10 +97,11 @@ _BUFF_INT_SIZE = const(_BUFF_SIZE // 4)
 
 class Grayscale:
 
+    # BLACK and WHITE is 0 and 1 to be compatible with the standard Thumby API
     BLACK     = 0
-    DARKGRAY  = 1
-    LIGHTGRAY = 2
-    WHITE     = 3
+    WHITE     = 1
+    DARKGRAY  = 2
+    LIGHTGRAY = 3
 
     def __init__(self):
         self._spi = SPI(0, sck=Pin(18), mosi=Pin(19))
@@ -121,8 +122,19 @@ class Grayscale:
         self.max_y = _HEIGHT - 1
 
         self.pages = self.height // 8
-        self.buffer1 = bytearray(_BUFF_SIZE)
-        self.buffer2 = bytearray(_BUFF_SIZE)
+
+        # Draw buffers.
+        # This comprises of two full buffer lengths.
+        # The first section contains black and white compatible
+        # with the display buffer from the standard Thumby API,
+        # and the second contains the shading to create
+        # offwhite (lightgray) or offblack (darkgray).
+        self.drawBuffer = bytearray(_BUFF_SIZE*2)
+        # The base "buffer" matches compatibility with the std Thumby API.
+        self.buffer = memoryview(self.drawBuffer)[:_BUFF_SIZE]
+        # The "shading" buffer adds the grayscale
+        self.shading = memoryview(self.drawBuffer)[_BUFF_SIZE:]
+
         self._buffer1 = bytearray(_BUFF_SIZE)
         self._buffer2 = bytearray(_BUFF_SIZE)
         self._buffer3 = bytearray(_BUFF_SIZE)
@@ -368,15 +380,15 @@ class Grayscale:
 
     @micropython.viper
     def _copy_buffers(self):
-        b1 = ptr32(self.buffer1) ; b2 = ptr32(self.buffer2)
+        bb = ptr32(self.buffer) ; bs = ptr32(self.shading)
         _b1 = ptr32(self._buffer1) ; _b2 = ptr32(self._buffer2) ; _b3 = ptr32(self._buffer3)
         i = 0
         while i < _BUFF_INT_SIZE:
-            v1 = b1[i]
-            v2 = b2[i]
+            v1 = bb[i]
+            v2 = bs[i]
             _b1[i] = v1 | v2
             _b2[i] = v2
-            _b3[i] = v1 & v2
+            _b3[i] = v1 & (v1 ^ v2)
             i += 1
         self._state[_ST_COPY_BUFFS] = 0
 
@@ -395,7 +407,7 @@ class Grayscale:
         postFrameCmds = self._postFrameCmds
 
         # we want ptr32 vars for fast buffer copying
-        b1 = ptr32(self.buffer1) ; b2 = ptr32(self.buffer2)
+        bb = ptr32(self.buffer) ; bs = ptr32(self.shading)
         _b1 = ptr32(self._buffer1) ; _b2 = ptr32(self._buffer2) ; _b3 = ptr32(self._buffer3)
 
         state[_ST_THREAD] = _THREAD_RUNNING
@@ -431,17 +443,17 @@ class Grayscale:
                     i = 0
                     # fast copy loop. By using using ptr32 vars we copy 3 bytes at a time.
                     while i < _BUFF_INT_SIZE:
-                        v1 = b1[i]
-                        v2 = b2[i]
+                        v1 = bb[i]
+                        v2 = bs[i]
                         # this isn't a straight copy. Instead we are mapping:
                         # in        out
                         # 0 (0b00)  0 (0b000)
-                        # 1 (0b01)  1 (0b001)
-                        # 2 (0b10)  3 (0b011)
-                        # 3 (0b11)  7 (0b111)
+                        # 1 (0b01)  7 (0b111)
+                        # 2 (0b10)  1 (0b001)
+                        # 3 (0b11)  3 (0b011)
                         _b1[i] = v1 | v2
                         _b2[i] = v2
-                        _b3[i] = v1 & v2
+                        _b3[i] = v1 & (v1 ^ v2)
                         i += 1
                     state[_ST_COPY_BUFFS] = 0
                 # check if there's a pending contrast/brightness value change
@@ -478,14 +490,14 @@ class Grayscale:
 
     @micropython.viper
     def fill(self, colour:int):
-        buffer1 = ptr32(self.buffer1)
-        buffer2 = ptr32(self.buffer2)
+        buffer = ptr32(self.buffer)
+        shading = ptr32(self.shading)
         f1 = -1 if colour & 1 else 0
         f2 = -1 if colour & 2 else 0
         i = 0
         while i < _BUFF_INT_SIZE:
-            buffer1[i] = f1
-            buffer2[i] = f2
+            buffer[i] = f1
+            shading[i] = f2
             i += 1
 
     @micropython.viper
@@ -509,8 +521,8 @@ class Grayscale:
             y2 = _HEIGHT
             height = _HEIGHT - y
 
-        buffer1 = ptr8(self.buffer1)
-        buffer2 = ptr8(self.buffer2)
+        buffer = ptr8(self.buffer)
+        shading = ptr8(self.shading)
 
         o = (y >> 3) * _WIDTH
         oe = o + x2
@@ -529,21 +541,21 @@ class Grayscale:
         im = 255-m
         while o < oe:
             if colour & 1:
-                buffer1[o] |= m
+                buffer[o] |= m
             else:
-                buffer1[o] &= im
+                buffer[o] &= im
             if colour & 2:
-                buffer2[o] |= m
+                shading[o] |= m
             else:
-                buffer2[o] &= im
+                shading[o] &= im
             o += 1
         height -= ybh
         while height >= 8:
             o += strd
             oe += _WIDTH
             while o < oe:
-                buffer1[o] = v1
-                buffer2[o] = v2
+                buffer[o] = v1
+                shading[o] = v2
                 o += 1
             height -= 8
         if height > 0:
@@ -553,13 +565,13 @@ class Grayscale:
             im = 255-m
             while o < oe:
                 if colour & 1:
-                    buffer1[o] |= m
+                    buffer[o] |= m
                 else:
-                    buffer1[o] &= im
+                    buffer[o] &= im
                 if colour & 2:
-                    buffer2[o] |= m
+                    shading[o] |= m
                 else:
-                    buffer2[o] &= im
+                    shading[o] &= im
                 o += 1
 
 
@@ -580,27 +592,27 @@ class Grayscale:
         o += x
         m = 1 << (y & 7)
         im = 255-m
-        buffer1 = ptr8(self.buffer1)
-        buffer2 = ptr8(self.buffer2)
+        buffer = ptr8(self.buffer)
+        shading = ptr8(self.shading)
         if colour == 0:
             while o < oe:
-                buffer1[o] &= im
-                buffer2[o] &= im
+                buffer[o] &= im
+                shading[o] &= im
                 o += 1
         elif colour == 1:
             while o < oe:
-                buffer1[o] |= m
-                buffer2[o] &= im
+                buffer[o] |= m
+                shading[o] &= im
                 o += 1
         elif colour == 2:
             while o < oe:
-                buffer1[o] &= im
-                buffer2[o] |= m
+                buffer[o] &= im
+                shading[o] |= m
                 o += 1
         elif colour == 3:
             while o < oe:
-                buffer1[o] |= m
-                buffer2[o] |= m
+                buffer[o] |= m
+                shading[o] |= m
                 o += 1
 
 
@@ -615,8 +627,8 @@ class Grayscale:
         if (y + height) > _HEIGHT:
             height = _HEIGHT - y
 
-        buffer1 = ptr8(self.buffer1)
-        buffer2 = ptr8(self.buffer2)
+        buffer = ptr8(self.buffer)
+        shading = ptr8(self.shading)
 
         o = (y >> 3) * _WIDTH + x
 
@@ -631,31 +643,31 @@ class Grayscale:
             m = 0xff << yb
         im = 255-m
         if colour & 1:
-            buffer1[o] |= m
+            buffer[o] |= m
         else:
-            buffer1[o] &= im
+            buffer[o] &= im
         if colour & 2:
-            buffer2[o] |= m
+            shading[o] |= m
         else:
-            buffer2[o] &= im
+            shading[o] &= im
         height -= ybh
         while height >= 8:
             o += _WIDTH
-            buffer1[o] = v1
-            buffer2[o] = v2
+            buffer[o] = v1
+            shading[o] = v2
             height -= 8
         if height > 0:
             o += _WIDTH
             m = (1 << height) - 1
             im = 255-m
             if colour & 1:
-                buffer1[o] |= m
+                buffer[o] |= m
             else:
-                buffer1[o] &= im
+                buffer[o] &= im
             if colour & 2:
-                buffer2[o] |= m
+                shading[o] |= m
             else:
-                buffer2[o] &= im
+                shading[o] &= im
 
 
     @micropython.viper
@@ -673,16 +685,16 @@ class Grayscale:
         o = (y >> 3) * _WIDTH + x
         m = 1 << (y & 7)
         im = 255-m
-        buffer1 = ptr8(self.buffer1)
-        buffer2 = ptr8(self.buffer2)
+        buffer = ptr8(self.buffer)
+        shading = ptr8(self.shading)
         if colour & 1:
-            buffer1[o] |= m
+            buffer[o] |= m
         else:
-            buffer1[o] &= im
+            buffer[o] &= im
         if colour & 2:
-            buffer2[o] |= m
+            shading[o] |= m
         else:
-            buffer2[o] &= im
+            shading[o] &= im
 
     @micropython.viper
     def getPixel(self, x:int, y:int) -> int:
@@ -690,12 +702,12 @@ class Grayscale:
             return 0
         o = (y >> 3) * _WIDTH + x
         m = 1 << (y & 7)
-        buffer1 = ptr8(self.buffer1)
-        buffer2 = ptr8(self.buffer2)
+        buffer = ptr8(self.buffer)
+        shading = ptr8(self.shading)
         colour = 0
-        if buffer1[o] & m:
+        if buffer[o] & m:
             colour = 1
-        if buffer2[o] & m:
+        if shading[o] & m:
             colour |= 2
         return colour
 
@@ -724,8 +736,8 @@ class Grayscale:
             sx = -1
         x = x0
         y = y0
-        buffer1 = ptr8(self.buffer1)
-        buffer2 = ptr8(self.buffer2)
+        buffer = ptr8(self.buffer)
+        shading = ptr8(self.shading)
 
         o = (y >> 3) * _WIDTH + x
         m = 1 << (y & 7)
@@ -736,13 +748,13 @@ class Grayscale:
             while x != x1:
                 if 0 <= x < _WIDTH and 0 <= y < _HEIGHT:
                     if colour & 1:
-                        buffer1[o] |= m
+                        buffer[o] |= m
                     else:
-                        buffer1[o] &= im
+                        buffer[o] &= im
                     if colour & 2:
-                        buffer2[o] |= m
+                        shading[o] |= m
                     else:
-                        buffer2[o] &= im
+                        shading[o] &= im
                 err -= dy
                 if err < 0:
                     y += 1
@@ -761,13 +773,13 @@ class Grayscale:
             while y != y1:
                 if 0 <= x < _WIDTH and 0 <= y < _HEIGHT:
                     if colour & 1:
-                        buffer1[o] |= m
+                        buffer[o] |= m
                     else:
-                        buffer1[o] &= im
+                        buffer[o] &= im
                     if colour & 2:
-                        buffer2[o] |= m
+                        shading[o] |= m
                     else:
-                        buffer2[o] &= im
+                        shading[o] &= im
                 err -= dx
                 if err < 0:
                     x += sx
@@ -783,13 +795,13 @@ class Grayscale:
                     im = 255-m
         if 0 <= x < _WIDTH and 0 <= y < _HEIGHT:
             if colour & 1:
-                buffer1[o] |= m
+                buffer[o] |= m
             else:
-                buffer1[o] &= im
+                buffer[o] &= im
             if colour & 2:
-                buffer2[o] |= m
+                shading[o] |= m
             else:
-                buffer2[o] &= im
+                shading[o] &= im
 
 
 
@@ -806,8 +818,8 @@ class Grayscale:
 
     @micropython.viper
     def drawText(self, txt, x:int, y:int, colour:int):
-        buffer1 = ptr8(self.buffer1)
-        buffer2 = ptr8(self.buffer2)
+        buffer = ptr8(self.buffer)
+        shading = ptr8(self.shading)
         font_bmap = ptr8(self.font_bmap)
         font_width = int(self.font_width)
         font_space = int(self.font_space)
@@ -835,12 +847,12 @@ class Grayscale:
                         gbl = gb >> shl
                         if 0 <= ou < 360:
                             # paint upper byte
-                            buffer1[ou] = (buffer1[ou] | (gbu & sm1o)) & 255-(gbu & sm1a)
-                            buffer2[ou] = (buffer2[ou] | (gbu & sm2o)) & 255-(gbu & sm2a)
+                            buffer[ou] = (buffer[ou] | (gbu & sm1o)) & 255-(gbu & sm1a)
+                            shading[ou] = (shading[ou] | (gbu & sm2o)) & 255-(gbu & sm2a)
                         if (shl != 8) and (0 <= ol < 360):
                             # paint lower byte
-                            buffer1[ol] = (buffer1[ol] | (gbl & sm1o)) & 255-(gbl & sm1a)
-                            buffer2[ol] = (buffer2[ol] | (gbl & sm2o)) & 255-(gbl & sm2a)
+                            buffer[ol] = (buffer[ol] | (gbl & sm1o)) & 255-(gbl & sm1a)
+                            shading[ol] = (shading[ol] | (gbl & sm2o)) & 255-(gbl & sm2a)
                     ou += 1
                     ol += 1
                     x += 1
@@ -856,8 +868,8 @@ class Grayscale:
             return
         if y+height < 0 or y >= _HEIGHT:
             return
-        buffer1 = ptr8(self.buffer1)
-        buffer2 = ptr8(self.buffer2)
+        buffer = ptr8(self.buffer)
+        shading = ptr8(self.shading)
 
         stride = width
 
@@ -911,13 +923,13 @@ class Grayscale:
                     v |= 2
                 if (key == -1) or (v != key):
                     if v & 1:
-                        buffer1[dstco] |= dstm
+                        buffer[dstco] |= dstm
                     else:
-                        buffer1[dstco] &= dstim
+                        buffer[dstco] &= dstim
                     if v & 2:
-                        buffer2[dstco] |= dstm
+                        shading[dstco] |= dstm
                     else:
-                        buffer2[dstco] &= dstim
+                        shading[dstco] &= dstim
                 srcco += sdx
                 dstco += 1
                 i -= 1
@@ -950,8 +962,8 @@ class Grayscale:
             return
         if y+height < 0 or y >= _HEIGHT:
             return
-        buffer1 = ptr8(self.buffer1)
-        buffer2 = ptr8(self.buffer2)
+        buffer = ptr8(self.buffer)
+        shading = ptr8(self.shading)
 
         stride = width
 
@@ -1000,13 +1012,13 @@ class Grayscale:
             while i != 0:
                 if (mask[srcco] & srcm) == 0:
                     if src1[srcco] & srcm:
-                        buffer1[dstco] |= dstm
+                        buffer[dstco] |= dstm
                     else:
-                        buffer1[dstco] &= dstim
+                        buffer[dstco] &= dstim
                     if src2[srcco] & srcm:
-                        buffer2[dstco] |= dstm
+                        shading[dstco] |= dstm
                     else:
-                        buffer2[dstco] &= dstim
+                        shading[dstco] &= dstim
                 srcco += sdx
                 dstco += 1
                 i -= 1
