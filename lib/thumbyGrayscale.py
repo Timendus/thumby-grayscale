@@ -94,6 +94,7 @@ _ST_THREAD       = const(0)
 _ST_COPY_BUFFS   = const(1)
 _ST_PENDING_CMD  = const(2)
 _ST_CONTRAST     = const(3)
+_ST_INVERT       = const(4)
 
 # Screen display size constants
 _WIDTH = const(72)
@@ -204,9 +205,10 @@ class Grayscale:
         # Instead, elements of an array/bytearray should be used.
         # We're using a uint32 array here, as that should hopefully further ensure
         # the atomicity of any element accesses.
-        self._state = array('I', [_THREAD_STOPPED,0,0,0])
+        # [thread_state, buff_copy_gate, pending_cmd_gate, constrast_change, inverted]
+        self._state = array('I', [_THREAD_STOPPED,0,0,0,0])
 
-        self._pendingCmds = bytearray([0] * 8)
+        self._pendingCmds = bytearray(8)
 
         self.setFont('lib/font5x7.bin', 5, 7, 1)
 
@@ -241,6 +243,7 @@ class Grayscale:
         # Disable device controller functions
         def _disabled(*arg, **kwdarg):
             pass
+        self.invert = _disabled
         self.reset = _disabled
         self.poweron = _disabled
         self.poweroff = _disabled
@@ -269,6 +272,8 @@ class Grayscale:
                 # 0xa8,39       Set multiplex ratio to height (releasing updates)
                 # 0xd3,0        Set display offset to 0
                 self._spi.write(bytearray([0xa8,_HEIGHT-1,0xd3,0]))
+                if self._state[_ST_INVERT]:
+                    self._spi.write(bytearray[0xa6 | 1])    # Resume device color inversion
             else:
                 # Initialise the display for grayscale timings
                 # 0xae          Display Off
@@ -387,6 +392,17 @@ class Grayscale:
         self.write_cmd(0xae)
     def poweron(self):
         self.write_cmd(0xaf)
+
+
+    @micropython.viper
+    def invert(self, invert:int):
+        state = ptr32(self._state)
+        invert = 1 if invert else 0
+        state[_ST_INVERT] = invert
+        state[_ST_COPY_BUFFS] = 1
+        if state[_ST_THREAD] != _THREAD_RUNNING:
+            self.write_cmd(0xa6 | invert)
+
 
     @micropython.viper
     def show(self):
@@ -517,9 +533,10 @@ class Grayscale:
                 # the last frame to avoid screen-tearing artefacts
                 if (fn == 2) and (state[_ST_COPY_BUFFS] != 0):
                     i = 0
+                    inv = -1 if state[_ST_INVERT] else 0
                     # fast copy loop. By using using ptr32 vars we copy 3 bytes at a time.
                     while i < _BUFF_INT_SIZE:
-                        v1 = bb[i]
+                        v1 = bb[i] ^ inv
                         v2 = bs[i]
                         # this isn't a straight copy. Instead we are mapping:
                         # in        out
