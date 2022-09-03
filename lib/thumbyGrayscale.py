@@ -399,87 +399,82 @@ class Grayscale:
         _b1 = ptr32(self._buffer1) ; _b2 = ptr32(self._buffer2) ; _b3 = ptr32(self._buffer3)
 
         state[_ST_THREAD] = _THREAD_RUNNING
-        while True:
-            while state[_ST_THREAD] == _THREAD_RUNNING:
-                # this is the main GPU loop. We cycle through each of the 3 display
-                # framebuffers, sending the framebuffer data and various commands.
-                fn = 0
-                while fn < 3:
-                    t0 = ticks_us()
-                    # the 'dc' output is used to switch the controller to receive
-                    # commands (0) or frame data (1)
-                    dc(0)
-                    # send the pre-frame commands to 'park' the row counter
-                    spi_write(preFrameCmds)
-                    dc(1)
-                    # and then send the frame
-                    spi_write(buffers[fn])
-                    dc(0)
-                    # send the first instance of the contrast adjust command
-                    spi_write(postFrameAdj[fn])
-                    # wait for the pre-frame time to complete
-                    sleep_us(_PRE_FRAME_TIME_US - int(ticks_diff(ticks_us(), t0)))
-                    t0 = ticks_us()
-                    # now send the post-frame commands to display the frame
-                    spi_write(postFrameCmds)
-                    # and adjust the contrast for the specific frame number again.
-                    # If we do not do this twice, the screen can glitch.
-                    spi_write(postFrameAdj[fn])
-                    # check if there's a pending frame copy required
-                    # we only copy the paint framebuffers to the display framebuffers on
-                    # the last frame to avoid screen-tearing artefacts
-                    if (fn == 2) and (state[_ST_COPY_BUFFS] != 0):
-                        i = 0
-                        # fast copy loop. By using using ptr32 vars we copy 3 bytes at a time.
-                        while i < _BUFF_INT_SIZE:
-                            v1 = b1[i]
-                            v2 = b2[i]
-                            # this isn't a straight copy. Instead we are mapping:
-                            # in        out
-                            # 0 (0b00)  0 (0b000)
-                            # 1 (0b01)  1 (0b001)
-                            # 2 (0b10)  3 (0b011)
-                            # 3 (0b11)  7 (0b111)
-                            _b1[i] = v1 | v2
-                            _b2[i] = v2
-                            _b3[i] = v1 & v2
-                            i += 1
-                        state[_ST_COPY_BUFFS] = 0
-                    # check if there's a pending contrast/brightness value change
-                    # again, we only adjust this after the last frame in the cycle
-                    elif (fn == 2) and (state[_ST_CONTRAST] != 0xffff):
-                        contrast = state[_ST_CONTRAST]
-                        state[_ST_CONTRAST] = 0xffff
-                        # shift the value to provide 3 different levels
-                        postFrameAdj[0][1] = contrast >> 5
-                        postFrameAdj[1][1] = contrast >> 1
-                        postFrameAdj[2][1] = (contrast << 1) + 1
-                    # check if there are pending commands
-                    elif state[_ST_PENDING_CMD]:
-                        # and send them
-                        spi_write(pending_cmds)
-                        state[_ST_PENDING_CMD] = 0
-                    # two stage wait for frame time to complete
-                    # we use sleep_ms() first to allow idle loop usage, with >>10 for a fast
-                    # /1000 approximation
-                    sleep_ms((_FRAME_TIME_US - int(ticks_diff(ticks_us(), t0))) >> 10)
-                    # and finish with a sleep_us() to spin for the correct duration
-                    sleep_us(_FRAME_TIME_US - int(ticks_diff(ticks_us(), t0)))
-                    fn += 1
-            # if the state has changed to 'stopping'
-            if state[_ST_THREAD] == _THREAD_STOPPING:
-                i = 0
-                # blank out framebuffer 1
-                while i < _BUFF_INT_SIZE:
-                    _b1[i] = 0
-                    i += 1
+        while state[_ST_THREAD] == _THREAD_RUNNING:
+            # this is the main GPU loop. We cycle through each of the 3 display
+            # framebuffers, sending the framebuffer data and various commands.
+            fn = 0
+            while fn < 3:
+                t0 = ticks_us()
+                # the 'dc' output is used to switch the controller to receive
+                # commands (0) or frame data (1)
+                dc(0)
+                # send the pre-frame commands to 'park' the row counter
+                spi_write(preFrameCmds)
                 dc(1)
-                # and send it to clear the screen
-                spi_write(buffers[0])
-                # and mark that we've stopped
-                state[_ST_THREAD] = _THREAD_STOPPED
-                # the thread can now exit
-                return
+                # and then send the frame
+                spi_write(buffers[fn])
+                dc(0)
+                # send the first instance of the contrast adjust command
+                spi_write(postFrameAdj[fn])
+                # wait for the pre-frame time to complete
+                sleep_us(_PRE_FRAME_TIME_US - int(ticks_diff(ticks_us(), t0)))
+                t0 = ticks_us()
+                # now send the post-frame commands to display the frame
+                spi_write(postFrameCmds)
+                # and adjust the contrast for the specific frame number again.
+                # If we do not do this twice, the screen can glitch.
+                spi_write(postFrameAdj[fn])
+                # check if there's a pending frame copy required
+                # we only copy the paint framebuffers to the display framebuffers on
+                # the last frame to avoid screen-tearing artefacts
+                if (fn == 2) and (state[_ST_COPY_BUFFS] != 0):
+                    i = 0
+                    # fast copy loop. By using using ptr32 vars we copy 3 bytes at a time.
+                    while i < _BUFF_INT_SIZE:
+                        v1 = b1[i]
+                        v2 = b2[i]
+                        # this isn't a straight copy. Instead we are mapping:
+                        # in        out
+                        # 0 (0b00)  0 (0b000)
+                        # 1 (0b01)  1 (0b001)
+                        # 2 (0b10)  3 (0b011)
+                        # 3 (0b11)  7 (0b111)
+                        _b1[i] = v1 | v2
+                        _b2[i] = v2
+                        _b3[i] = v1 & v2
+                        i += 1
+                    state[_ST_COPY_BUFFS] = 0
+                # check if there's a pending contrast/brightness value change
+                # again, we only adjust this after the last frame in the cycle
+                elif (fn == 2) and (state[_ST_CONTRAST] != 0xffff):
+                    contrast = state[_ST_CONTRAST]
+                    state[_ST_CONTRAST] = 0xffff
+                    # shift the value to provide 3 different levels
+                    postFrameAdj[0][1] = contrast >> 5
+                    postFrameAdj[1][1] = contrast >> 1
+                    postFrameAdj[2][1] = (contrast << 1) + 1
+                # check if there are pending commands
+                elif state[_ST_PENDING_CMD]:
+                    # and send them
+                    spi_write(pending_cmds)
+                    state[_ST_PENDING_CMD] = 0
+                # two stage wait for frame time to complete
+                # we use sleep_ms() first to allow idle loop usage, with >>10 for a fast
+                # /1000 approximation
+                sleep_ms((_FRAME_TIME_US - int(ticks_diff(ticks_us(), t0))) >> 10)
+                # and finish with a sleep_us() to spin for the correct duration
+                sleep_us(_FRAME_TIME_US - int(ticks_diff(ticks_us(), t0)))
+                fn += 1
+        i = 0
+        # blank out framebuffer 1
+        while i < _BUFF_INT_SIZE:
+            _b1[i] = 0
+            i += 1
+        dc(1)
+        # and send it to clear the screen
+        spi_write(buffers[0])
+        # and mark that we've stopped
+        state[_ST_THREAD] = _THREAD_STOPPED
 
 
     @micropython.viper
