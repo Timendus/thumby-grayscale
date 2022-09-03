@@ -172,19 +172,20 @@ class Grayscale:
             for k in range(len(conf)):
                 if(conf[k] == "brightness"):
                     brightnessSetting = int(conf[k+1])
-        except OSError:
+        except (OSError, ValueError):
             pass
         # but with a set of contrast values spanning the entire range provided by the controller
-        brightnessVals = [0,56,127]
-        brightnessVal = brightnessVals[brightnessSetting]
+        brightnessVals = [0,28,127]
+        self._brightness = brightnessVals[brightnessSetting]
         # 0x81,<val>        Set Bank0 contrast value to <val>
-        self._postFrameAdj = [bytearray([0x81,brightnessVal>>5]), bytearray([0x81,brightnessVal]), bytearray([0x81,(brightnessVal << 1) + 1])]
+        self._postFrameAdj = array('O', [bytearray([0x81,0]) for _ in range(3)])
+        self._postFrameAdjSrc = bytearray(3)
 
         # It's better to avoid using regular variables for thread sychronisation.
         # Instead, elements of an array/bytearray should be used.
         # We're using a uint32 array here, as that should hopefully further ensure
         # the atomicity of any element accesses.
-        self._state = array('I', [0,0,0,0xff])
+        self._state = array('I', [0,0,0,0])
 
         self._pendingCmds = bytearray([0] * 8)
 
@@ -193,6 +194,7 @@ class Grayscale:
         self.lastUpdateEnd = 0
         self.frameRate = 0
 
+        self.brightness(self._brightness)
         self.fill(Grayscale.BLACK)
         self._copy_buffers()
         self.init_display()
@@ -348,23 +350,21 @@ class Grayscale:
         self.lastUpdateEnd = ticks_ms()
 
 
-    def brightness(self, c):
-        if c < 0:
-            c = 0
-        elif c > 127:
-            c = 127
-        self._state[_ST_CONTRAST] = c
+    @micropython.viper
+    def brightness(self, c:int):
+        if c < 0: c = 0
+        if c > 127: c = 127
+        state = ptr32(self._state)
+        postFrameAdj = self._postFrameAdj
+        postFrameAdjSrc = ptr8(self._postFrameAdjSrc)
+        # Shift the value to provide 3 different subframe levels for the GPU
+        postFrameAdjSrc[0] = c >> 5
+        postFrameAdjSrc[1] = c >> 1
+        postFrameAdjSrc[2] = (c << 1) + 1
+        # Apply to GPU
+        state[_ST_CONTRAST] = 1
+        setattr(self, '_brightness', c)
 
-    def brightness_sync(self, c):
-        if c < 0:
-            c = 0
-        elif c > 127:
-            c = 127
-        self._state[_ST_CONTRAST] = c
-        if self._state[_ST_THREAD] != _THREAD_RUNNING:
-            return
-        while self._state[_ST_CONTRAST] != 0xff:
-            idle()
 
     @micropython.viper
     def _copy_buffers(self):
@@ -446,13 +446,12 @@ class Grayscale:
                     state[_ST_COPY_BUFFS] = 0
                 # check if there's a pending contrast/brightness value change
                 # again, we only adjust this after the last frame in the cycle
-                elif (fn == 2) and (state[_ST_CONTRAST] != 0xffff):
-                    contrast = state[_ST_CONTRAST]
-                    state[_ST_CONTRAST] = 0xffff
-                    # shift the value to provide 3 different levels
-                    postFrameAdj[0][1] = contrast >> 5
-                    postFrameAdj[1][1] = contrast >> 1
-                    postFrameAdj[2][1] = (contrast << 1) + 1
+                elif (fn == 2) and state[_ST_CONTRAST]:
+                    # Copy in the new contrast adjustments
+                    ptr8(postFrameAdj[0])[1] = postFrameAdjSrc[0]
+                    ptr8(postFrameAdj[1])[1] = postFrameAdjSrc[1]
+                    ptr8(postFrameAdj[2])[1] = postFrameAdjSrc[2]
+                    state[_ST_CONTRAST] = 0
                 # check if there are pending commands
                 elif state[_ST_PENDING_CMD]:
                     # and send them
