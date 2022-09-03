@@ -135,9 +135,8 @@ class Grayscale:
         # The "shading" buffer adds the grayscale
         self.shading = memoryview(self.drawBuffer)[_BUFF_SIZE:]
 
-        self._buffer1 = bytearray(_BUFF_SIZE)
-        self._buffer2 = bytearray(_BUFF_SIZE)
-        self._buffer3 = bytearray(_BUFF_SIZE)
+        self._subframes = array('O', [bytearray(_BUFF_SIZE),
+            bytearray(_BUFF_SIZE), bytearray(_BUFF_SIZE)])
 
         # The method used to create reduced flicker greyscale using the SSD1306
         # uses certain assumptions about the internal behaviour of the
@@ -381,14 +380,14 @@ class Grayscale:
     @micropython.viper
     def _copy_buffers(self):
         bb = ptr32(self.buffer) ; bs = ptr32(self.shading)
-        _b1 = ptr32(self._buffer1) ; _b2 = ptr32(self._buffer2) ; _b3 = ptr32(self._buffer3)
+        b1 = ptr32(self.subframes[0]) ; b2 = ptr32(self.subframes[1]) ; b3 = ptr32(self.subframes[2])
         i = 0
         while i < _BUFF_INT_SIZE:
             v1 = bb[i]
             v2 = bs[i]
-            _b1[i] = v1 | v2
-            _b2[i] = v2
-            _b3[i] = v1 & (v1 ^ v2)
+            b1[i] = v1 | v2
+            b2[i] = v2
+            b3[i] = v1 & (v1 ^ v2)
             i += 1
         self._state[_ST_COPY_BUFFS] = 0
 
@@ -397,7 +396,7 @@ class Grayscale:
     @micropython.viper
     def _display_thread(self):
         # local object arrays for display framebuffers and post-frame commands
-        buffers = array('O', [self._buffer1, self._buffer2, self._buffer3])
+        subframes = self._subframes
         postFrameAdj = array('O', [self._postFrameAdj[0], self._postFrameAdj[1], self._postFrameAdj[2]])
         # cache various instance variables, buffers, and functions/methods
         state = ptr32(self._state)
@@ -408,7 +407,7 @@ class Grayscale:
 
         # we want ptr32 vars for fast buffer copying
         bb = ptr32(self.buffer) ; bs = ptr32(self.shading)
-        _b1 = ptr32(self._buffer1) ; _b2 = ptr32(self._buffer2) ; _b3 = ptr32(self._buffer3)
+        b1 = ptr32(subframes[0]) ; b2 = ptr32(subframes[1]) ; b3 = ptr32(subframes[2])
 
         state[_ST_THREAD] = _THREAD_RUNNING
         while state[_ST_THREAD] == _THREAD_RUNNING:
@@ -424,7 +423,7 @@ class Grayscale:
                 spi_write(preFrameCmds)
                 dc(1)
                 # and then send the frame
-                spi_write(buffers[fn])
+                spi_write(subframes[fn])
                 dc(0)
                 # send the first instance of the contrast adjust command
                 spi_write(postFrameAdj[fn])
@@ -451,9 +450,9 @@ class Grayscale:
                         # 1 (0b01)  7 (0b111)
                         # 2 (0b10)  1 (0b001)
                         # 3 (0b11)  3 (0b011)
-                        _b1[i] = v1 | v2
-                        _b2[i] = v2
-                        _b3[i] = v1 & (v1 ^ v2)
+                        b1[i] = v1 | v2
+                        b2[i] = v2
+                        b3[i] = v1 & (v1 ^ v2)
                         i += 1
                     state[_ST_COPY_BUFFS] = 0
                 # check if there's a pending contrast/brightness value change
@@ -479,11 +478,11 @@ class Grayscale:
         i = 0
         # blank out framebuffer 1
         while i < _BUFF_INT_SIZE:
-            _b1[i] = 0
+            b1[i] = 0
             i += 1
         dc(1)
         # and send it to clear the screen
-        spi_write(buffers[0])
+        spi_write(subframes[0])
         # and mark that we've stopped
         state[_ST_THREAD] = _THREAD_STOPPED
 
