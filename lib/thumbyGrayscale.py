@@ -3,6 +3,7 @@ from utime import sleep_ms, ticks_diff, ticks_ms, sleep_us
 from machine import Pin, SPI, freq, idle, mem32
 import _thread
 from os import stat
+from math import sqrt, floor
 import gc
 from array import array
 from thumbyButton import buttonA, buttonB, buttonU, buttonD, buttonL, buttonR
@@ -183,20 +184,19 @@ class Grayscale:
         self._postFrameCmds = bytearray([0xd3,_HEIGHT+(64-57), 0xa8,57-1])
 
         # We enhance the greys by modulating the contrast.
+        # 0x81,<val>        Set Bank0 contrast value to <val>
         # Use setting from thumby.cfg
-        brightnessSetting=2
+        self._brightness = 127
         try:
             with open("thumby.cfg", "r") as fh:
-                conf = fh.read().split(',')
-            for k in range(len(conf)):
-                if(conf[k] == "brightness"):
-                    brightnessSetting = int(conf[k+1])
+                _, _, conf = fh.read().partition("brightness,")
+                b = int(conf.split(',')[0])
+                # Set to the relevant brightness level
+                if b == 0: self._brightness = 0
+                if b == 1: self._brightness = 28
+                # Otherwise, leave it at 127
         except (OSError, ValueError):
             pass
-        # but with a set of contrast values spanning the entire range provided by the controller
-        brightnessVals = [0,28,127]
-        self._brightness = brightnessVals[brightnessSetting]
-        # 0x81,<val>        Set Bank0 contrast value to <val>
         self._postFrameAdj = array('O', [bytearray([0x81,0]) for _ in range(3)])
         self._postFrameAdjSrc = bytearray(3)
 
@@ -442,10 +442,17 @@ class Grayscale:
         state = ptr32(self._state)
         postFrameAdj = self._postFrameAdj
         postFrameAdjSrc = ptr8(self._postFrameAdjSrc)
-        # Shift the value to provide 3 different subframe levels for the GPU
-        postFrameAdjSrc[0] = c >> 5
-        postFrameAdjSrc[1] = c >> 1
-        postFrameAdjSrc[2] = (c << 1) + 1
+
+        # Provide 3 different subframe levels for the GPU
+        # Low (0): 0, 5, 15
+        # Mid (28): 4, 42, 173
+        # High (127):  9, 84, 255
+        cc = int(floor(sqrt(c<<17)))
+        postFrameAdjSrc[0] = (cc*30>>12)+6
+        postFrameAdjSrc[1] = (cc*72>>12)+14
+        c3 = (cc*340>>12)+20
+        postFrameAdjSrc[2] = c3 if c3 < 255 else 255
+
         # Apply to display, GPU, and emulator
         if state[_ST_THREAD] == _THREAD_RUNNING:
             state[_ST_CONTRAST] = 1
