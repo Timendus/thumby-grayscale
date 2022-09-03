@@ -174,5 +174,5 @@ while not actionPressed():
 
 # End of demo!
 
-gs.stop()
+gs.disableGrayscale()
 reset()

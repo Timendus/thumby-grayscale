@@ -77,8 +77,8 @@ _PRE_FRAME_TIME_US    = const( 785)     # 8 rows: ( 8*(1+1+50)) / 530e3 seconds
 _FRAME_TIME_US        = const(4709)     # 48 rows: (49*(1+1+50)) / 530e3 seconds
 
 # Thread state variables for managing the Grayscale Thread
-_THREAD_STARTING   = const(0)
-_THREAD_STOPPED    = const(1)
+_THREAD_STOPPED    = const(0)
+_THREAD_STARTING   = const(1)
 _THREAD_RUNNING    = const(2)
 _THREAD_STOPPING   = const(3)
 
@@ -113,6 +113,8 @@ class Grayscale:
         self._res.init(Pin.OUT, value=1)
         self._dc.init(Pin.OUT, value=0)
         self._cs.init(Pin.OUT, value=1)
+
+        self._display_initialised = False
 
         self.display = self     # This acts as both the GraphicsClass and SSD1306
 
@@ -196,7 +198,7 @@ class Grayscale:
         # Instead, elements of an array/bytearray should be used.
         # We're using a uint32 array here, as that should hopefully further ensure
         # the atomicity of any element accesses.
-        self._state = array('I', [0,0,0,0])
+        self._state = array('I', [_THREAD_STOPPED,0,0,0])
 
         self._pendingCmds = bytearray([0] * 8)
 
@@ -204,25 +206,18 @@ class Grayscale:
 
         self.lastUpdateEnd = 0
         self.frameRate = 0
-
         self.brightness(self._brightness)
-        self.fill(Grayscale.BLACK)
-        self._copy_buffers()
-        self.init_display()
-        self.state = _THREAD_STARTING
-        _thread.stack_size(2048)        # minimum stack size for RP2040 micropython port
-        _thread.start_new_thread(self._display_thread, ())
 
-        # Wait for the thread to successfully settle into a running state
-        while self._state[_ST_THREAD] != _THREAD_RUNNING:
-            idle()
+        _thread.stack_size(2048)        # minimum stack size for RP2040 micropython port
+
 
 
     # allow use of 'with'
     def __enter__(self):
+        self.enableGrayscale()
         return self
     def __exit__(self, type, value, traceback):
-        self.stop()
+        self.disableGrayscale()
 
 
     def reset(self):
@@ -235,10 +230,30 @@ class Grayscale:
 
 
     def init_display(self):
+        self._dc(0)
+        if self._display_initialised:
+            if self._state[_ST_THREAD] == _THREAD_STOPPED:
+                # (Re)Initialise the display for monocrhome timings
+                # 0xa8,0        Set multiplex ratio to 0 (pausing updates)
+                # 0xd3,52       Set display offset to 52
+                self._spi.write(bytearray([0xa8,0, 0xd3,52]))
+                sleep_us(_FRAME_TIME_US*3)
+                # 0xa8,39       Set multiplex ratio to height (releasing updates)
+                # 0xd3,0        Set display offset to 0
+                self._spi.write(bytearray([0xa8,_HEIGHT-1,0xd3,0]))
+            else:
+                # Initialise the display for grayscale timings
+                # 0xae          Display Off
+                # 0xa8,0        Set multiplex ratio to 0 (will be changed later)
+                # 0xd3,0        Set display offset to 0 (will be changed later)
+                # 0xaf           Set display on
+                self._spi.write(bytearray([0xae, 0xa8,0, 0xd3,0, 0xaf]))
+            return
+
         self.reset()
         self._cs(0)
-        self._dc(0)
-        # initialise as usual, except with shortest pre-charge periods and highest clock frequency
+        # initialise as usual, except with shortest pre-charge
+        # periods and highest clock frequency
         # 0xae          Display Off
         # 0x20,0x00     Set horizontal addressing mode
         # 0x40          Set display start line to 0
@@ -258,7 +273,8 @@ class Grayscale:
         # 0xad,0x30     Select internal 30uA Iref (max Iseg=240uA) during display on
         # 0xf           Set display on
         self._spi.write(bytearray([
-            0xae, 0x20,0x00, 0x40, 0xa1, 0xa8,63, 0xc8, 0xd3,0, 0xda,0x12, 0xd5,0xf0, 0xd9,0x11, 0xdb,0x20, 0x81,0x7f,
+            0xae, 0x20,0x00, 0x40, 0xa1, 0xa8,63, 0xc8, 0xd3,0, 0xda,0x12,
+            0xd5,0xf0, 0xd9,0x11, 0xdb,0x20, 0x81,0x7f,
             0xa4, 0xa6, 0x8d,0x14, 0xad,0x30, 0xaf]))
         self._dc(1)
         # clear the entire GDRAM
@@ -270,30 +286,40 @@ class Grayscale:
         # 0x21,28,99    Set column start (28) and end (99) addresses
         # 0x22,0,4      Set page start (0) and end (4) addresses0
         self._spi.write(bytearray([0x21,28,99, 0x22,0,4]))
+        self._display_initialised = True
 
 
-    def stop(self):
+    def enableGrayscale(self):
         if self._state[_ST_THREAD] == _THREAD_RUNNING:
-            self._state[_ST_THREAD] = _THREAD_STOPPING
-            while self._state[_ST_THREAD] != _THREAD_STOPPED:
-                idle()
-        self._cs(1)
-        self.reset()
-        self._cs(0)
-        self._dc(0)
-        # reinitialise to the normal configuration. Copied from ssd1306.py
-        self._spi.write(bytearray([
-            0xae, 0x20,0x00, 0x40, 0xa1, 0xa8,self.height-1, 0xc8, 0xd3,0, 0xda,0x12, 0xd5,0x80,
-            0xd9,0xf1, 0xdb,0x20, 0x81,0x7f,
-            0xa4, 0xa6, 0x8d,0x14, 0xad,0x30, 0xaf,
-            0x21,28,99, 0x22,0,4]))
-        self._cs(1)
+            return
+
+        self._state[_ST_THREAD] = _THREAD_STARTING
+        self.init_display()
+        _thread.start_new_thread(self._display_thread, ())
+
+        # Wait for the thread to successfully settle into a running state
+        while self._state[_ST_THREAD] != _THREAD_RUNNING:
+            idle()
+
+
+    def disableGrayscale(self):
+        if self._state[_ST_THREAD] != _THREAD_RUNNING:
+            return
+        self._state[_ST_THREAD] = _THREAD_STOPPING
+        while self._state[_ST_THREAD] != _THREAD_STOPPED:
+            idle()
+        # Refresh the image to the B/W form
+        self.init_display()
+        self.show()
+        # Change back to the original (unmodulated) brightness setting
+        self.brightness(self._brightness)
+
 
     @micropython.native
     def write_cmd(self, cmd):
-        if cmd is list:
+        if isinstance(cmd, list):
             cmd = bytearray(cmd)
-        elif not cmd is bytearray:
+        elif not isinstance(cmd, bytearray):
             cmd = bytearray([cmd])
         if self._state[_ST_THREAD] == _THREAD_RUNNING:
             pendingCmds = self._pendingCmds
@@ -325,15 +351,21 @@ class Grayscale:
     @micropython.viper
     def show(self):
         state = ptr32(self._state)
-        state[_ST_COPY_BUFFS] = 1
-        if state[_ST_THREAD] != _THREAD_RUNNING:
-            return
-        while state[_ST_COPY_BUFFS] != 0:
-            idle()
+        if state[_ST_THREAD] == _THREAD_RUNNING:
+            state[_ST_COPY_BUFFS] = 1
+            while state[_ST_COPY_BUFFS] != 0:
+                idle()
+        else:
+            self._dc(1)
+            self._spi.write(self.buffer)
 
     @micropython.native
     def show_async(self):
-        self._state[_ST_COPY_BUFFS] = 1
+        state = ptr32(self._state)
+        if state[_ST_THREAD] == _THREAD_RUNNING:
+            state[_ST_COPY_BUFFS] = 1
+        else:
+            self.show()
 
 
     @micropython.native
@@ -372,24 +404,17 @@ class Grayscale:
         postFrameAdjSrc[0] = c >> 5
         postFrameAdjSrc[1] = c >> 1
         postFrameAdjSrc[2] = (c << 1) + 1
-        # Apply to GPU
-        state[_ST_CONTRAST] = 1
+        # Apply to display or GPU
+        if state[_ST_THREAD] == _THREAD_RUNNING:
+            state[_ST_CONTRAST] = 1
+        else:
+            # Copy in the new contrast adjustments for when the GPU starts
+            postFrameAdj[0][1] = postFrameAdjSrc[0]
+            postFrameAdj[1][1] = postFrameAdjSrc[1]
+            postFrameAdj[2][1] = postFrameAdjSrc[2]
+            # Apply the contrast directly to the display
+            self.write_cmd([0x81, c])
         setattr(self, '_brightness', c)
-
-
-    @micropython.viper
-    def _copy_buffers(self):
-        bb = ptr32(self.buffer) ; bs = ptr32(self.shading)
-        b1 = ptr32(self.subframes[0]) ; b2 = ptr32(self.subframes[1]) ; b3 = ptr32(self.subframes[2])
-        i = 0
-        while i < _BUFF_INT_SIZE:
-            v1 = bb[i]
-            v2 = bs[i]
-            b1[i] = v1 | v2
-            b2[i] = v2
-            b3[i] = v1 & (v1 ^ v2)
-            i += 1
-        self._state[_ST_COPY_BUFFS] = 0
 
 
     # GPU (Gray Processing Unit) thread function
@@ -475,15 +500,8 @@ class Grayscale:
                 # and finish with a sleep_us() to spin for the correct duration
                 sleep_us(_FRAME_TIME_US - int(ticks_diff(ticks_us(), t0)))
                 fn += 1
-        i = 0
-        # blank out framebuffer 1
-        while i < _BUFF_INT_SIZE:
-            b1[i] = 0
-            i += 1
-        dc(1)
-        # and send it to clear the screen
-        spi_write(subframes[0])
-        # and mark that we've stopped
+
+        # mark that we've stopped
         state[_ST_THREAD] = _THREAD_STOPPED
 
 
@@ -1045,3 +1063,4 @@ class Grayscale:
         self.blit(s.bitmap1, s.bitmap2, s.x, s.y, s.width, s.height, s.key, s.mirrorX, s.mirrorY, m.bitmap1)
 
 display = Grayscale()
+display.enableGrayscale()
