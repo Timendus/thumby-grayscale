@@ -17,32 +17,51 @@ except ImportError:
 
 class Sprite:
     @micropython.native
-    def __init__(self, width, height, bitmapData1, bitmapData2, x = 0, y=0, key=-1, mirrorX=False, mirrorY=False):
+    def __init__(self, width, height, bitmapData, x = 0, y=0, key=-1, mirrorX=False, mirrorY=False):
         self.width = width
         self.height = height
-        self.bitmapSource1 = bitmapData1
-        self.bitmapSource2 = bitmapData2
+        self.bitmapSource = bitmapData
         self.bitmapByteCount = width*(height//8)
         if(height%8):
             self.bitmapByteCount+=width
         self.frameCount = 1
         self.currentFrame = 0
-        if type(self.bitmapSource1)==str:
-            self.bitmap = bytearray(self.bitmapByteCount1)
-            self.file1 = open(self.bitmapSource1,'rb')
-            self.file1.readinto(self.bitmap1)
-            self.frameCount = stat(self.bitmapSource1)[6] // self.bitmapByteCount
-        elif type(self.bitmapSource1)==bytearray:
-            self.bitmap1 = memoryview(self.bitmapSource1)[0:self.bitmapByteCount]
-            self.frameCount = len(self.bitmapSource1) // self.bitmapByteCount
-        if type(self.bitmapSource2)==str:
-            self.bitmap2 = bytearray(self.bitmapByteCount)
-            self.file2 = open(self.bitmapSource2,'rb')
-            self.file2.readinto(self.bitmap2)
-            assert(self.frameCount == stat(self.bitmapSource2)[6] // self.bitmapByteCount)
-        elif type(self.bitmapSource2)==bytearray:
-            self.bitmap2 = memoryview(self.bitmapSource2)[0:self.bitmapByteCount]
-            assert(self.frameCount == len(self.bitmapSource2) // self.bitmapByteCount)
+        self._shaded = False
+        self._usesFile = False
+        if isinstance(bitmapData, (tuple, list)):
+            if (len(bitmapData) != 2) or (type(bitmapData[0]) != type(bitmapData[1])):
+                raise ValueError('bitmapData must be a bytearray, string, or tuple of two bytearrays or strings')
+            self._shaded = True
+            if isinstance(bitmapData[0], str):
+                self._usesFile = True
+                if stat(bitmapData[0])[6] != stat(bitmapData[1])[6]:
+                    raise ValueError('Sprite files must match in size')
+                self.bitmap = (bytearray(self.bitmapByteCount), bytearray(self.bitmapByteCount))
+                self.files = (open(bitmapData[0],'rb'),open(bitmapData[1],'rb'))
+                self.files[0].readinto(self.bitmap[0])
+                self.files[1].readinto(self.bitmap[1])
+                self.frameCount = stat(bitmapData[0])[6] // self.bitmapByteCount
+            elif isinstance(bitmapData[0], bytearray):
+                if len(bitmapData[0]) != len(bitmapData[1]):
+                    raise ValueError('Sprite bitplanes must match in size')
+                self.frameCount = len(bitmapData[0]) // self.bitmapByteCount
+                self.bitmap = [
+                    memoryview(bitmapData[0])[0:self.bitmapByteCount],
+                    memoryview(bitmapData[1])[0:self.bitmapByteCount]
+                ]
+            else:
+                raise ValueError('bitmapData must be a bytearray, string, or tuple of two bytearrays or strings')
+        elif isinstance(bitmapData, str):
+            self._usesFile = True
+            self.bitmap = bytearray(self.bitmapByteCount)
+            self.file = open(bitmapData,'rb')
+            self.file.readinto(self.bitmap)
+            self.frameCount = stat(bitmapData)[6] // self.bitmapByteCount
+        elif isinstance(bitmapData, bytearray):
+            self.bitmap = memoryview(bitmapData)[0:self.bitmapByteCount]
+            self.frameCount = len(bitmapData) // self.bitmapByteCount
+        else:
+            raise ValueError('bitmapData must be a bytearray, string, or tuple of two bytearrays or strings')
         self.x = x
         self.y = y
         self.key = key
@@ -58,18 +77,21 @@ class Sprite:
         if(frame >= 0 and (self.currentFrame is not frame % (self.frameCount))):
             self.currentFrame = frame % (self.frameCount)
             offset=self.bitmapByteCount*self.currentFrame
-            if type(self.bitmapSource1)==str:
-                self.file1.seek(offset)
-                self.file1.readinto(self.bitmap1)
-                #f.close()
-            elif type(self.bitmapSource1)==bytearray:
-                self.bitmap1 = memoryview(self.bitmapSource1)[offset:offset+self.bitmapByteCount]
-            if type(self.bitmapSource2)==str:
-                self.file2.seek(offset)
-                self.file2.readinto(self.bitmap2)
-                #f.close()
-            elif type(self.bitmapSource2)==bytearray:
-                self.bitmap2 = memoryview(self.bitmapSource2)[offset:offset+self.bitmapByteCount]
+            if self._shaded:
+                if self._usesFile:
+                    self.files[0].seek(offset)
+                    self.files[1].seek(offset)
+                    self.files[0].readinto(self.bitmap[0])
+                    self.files[1].readinto(self.bitmap[1])
+                else:
+                    self.bitmap[0] = memoryview(self.bitmapSource[0])[offset:offset+self.bitmapByteCount]
+                    self.bitmap[1] = memoryview(self.bitmapSource[1])[offset:offset+self.bitmapByteCount]
+            else:
+                if self._usesFile:
+                    self.file.seek(offset)
+                    self.file.readinto(self.bitmap)
+                else:
+                    self.bitmap = memoryview(self.bitmapSource)[offset:offset+self.bitmapByteCount]
 
 
 # The times below are calculated using phase 1 and phase 2 pre-charge
@@ -848,13 +870,22 @@ class Grayscale:
 
 
     @micropython.viper
-    def blit(self, src1:ptr8, src2:ptr8, x:int, y:int, width:int, height:int, key:int, mirrorX:int, mirrorY:int):
+    def blit(self, src, x:int, y:int, width:int, height:int, key:int, mirrorX:int, mirrorY:int):
         if x+width < 0 or x >= _WIDTH:
             return
         if y+height < 0 or y >= _HEIGHT:
             return
         buffer = ptr8(self.buffer)
         shading = ptr8(self.shading)
+
+        if isinstance(src, (tuple, list)):
+            shd = 1
+            src1 = ptr8(src[0])
+            src2 = ptr8(src[1])
+        else:
+            shd = 0
+            src1 = ptr8(src)
+            src2 = ptr8(0)
 
         stride = width
 
@@ -904,7 +935,7 @@ class Grayscale:
                 v = 0
                 if src1[srcco] & srcm:
                     v = 1
-                if src2[srcco] & srcm:
+                if shd and (src2[srcco] & srcm):
                     v |= 2
                 if (key == -1) or (v != key):
                     if v & 1:
@@ -939,16 +970,30 @@ class Grayscale:
 
     @micropython.native
     def drawSprite(self, s):
-        self.blit(s.bitmap1, s.bitmap2, s.x, s.y, s.width, s.height, s.key, s.mirrorX, s.mirrorY)
+        self.blit(s.bitmap, s.x, s.y, s.width, s.height, s.key, s.mirrorX, s.mirrorY)
 
     @micropython.viper
-    def blitWithMask(self, src1:ptr8, src2:ptr8, x:int, y:int, width:int, height:int, key:int, mirrorX:int, mirrorY:int, mask:ptr8):
+    def blitWithMask(self, src, x:int, y:int, width:int, height:int, key:int, mirrorX:int, mirrorY:int, mask):
         if x+width < 0 or x >= _WIDTH:
             return
         if y+height < 0 or y >= _HEIGHT:
             return
         buffer = ptr8(self.buffer)
         shading = ptr8(self.shading)
+
+        if isinstance(src, (tuple, list)):
+            shd = 1
+            src1 = ptr8(src[0])
+            src2 = ptr8(src[1])
+        else:
+            shd = 0
+            src1 = ptr8(src)
+            src2 = ptr8(0)
+
+        if isinstance(mask, (tuple, list)):
+            maskp = ptr8(mask[0])
+        else:
+            maskp = ptr8(mask)
 
         stride = width
 
@@ -995,12 +1040,12 @@ class Grayscale:
             dstco = dsto
             i = width
             while i != 0:
-                if (mask[srcco] & srcm) == 0:
+                if (maskp[srcco] & srcm) == 0:
                     if src1[srcco] & srcm:
                         buffer[dstco] |= dstm
                     else:
                         buffer[dstco] &= dstim
-                    if src2[srcco] & srcm:
+                    if shd and (src2[srcco] & srcm):
                         shading[dstco] |= dstm
                     else:
                         shading[dstco] &= dstim
@@ -1028,7 +1073,7 @@ class Grayscale:
 
     @micropython.native
     def drawSpriteWithMask(self, s, m):
-        self.blit(s.bitmap1, s.bitmap2, s.x, s.y, s.width, s.height, s.key, s.mirrorX, s.mirrorY, m.bitmap1)
+        self.blit(s.bitmap, s.x, s.y, s.width, s.height, s.key, s.mirrorX, s.mirrorY, m.bitmap)
 
 display = Grayscale()
 display.enableGrayscale()
