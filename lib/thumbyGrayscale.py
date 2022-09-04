@@ -7,6 +7,7 @@ from math import sqrt, floor
 import gc
 from array import array
 from thumbyButton import buttonA, buttonB, buttonU, buttonD, buttonL, buttonR
+from sys import modules
 
 emulator = None
 try:
@@ -169,6 +170,9 @@ class Grayscale:
 
         self._subframes = array('O', [bytearray(_BUFF_SIZE),
             bytearray(_BUFF_SIZE), bytearray(_BUFF_SIZE)])
+
+        if 'thumbyGraphics' in modules:
+            self.buffer[:] = modules['thumbyGraphics'].display.display.buffer
 
         # The method used to create reduced flicker greyscale using the SSD1306
         # uses certain assumptions about the internal behaviour of the
