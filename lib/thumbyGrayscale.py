@@ -510,19 +510,25 @@ class Grayscale:
     # GPU (Gray Processing Unit) thread function
     @micropython.viper
     def _display_thread(self):
-        # local object arrays for display framebuffers and post-frame commands
-        subframes = self._subframes
-        postFrameAdj = array('O', [self._postFrameAdj[0], self._postFrameAdj[1], self._postFrameAdj[2]])
-        # cache various instance variables, buffers, and functions/methods
+
+        # cache various instance variables and buffers
+        postFrameAdjSrc = ptr8(self._postFrameAdjSrc)
         state = ptr32(self._state)
-        spi_write = self._spi.write
-        dc = self._dc
-        preFrameCmds = self._preFrameCmds
-        postFrameCmds = self._postFrameCmds
+        preFrameCmds:ptr8 = ptr8(self._preFrameCmds)
+        postFrameCmds:ptr8 = ptr8(self._postFrameCmds)
+        pendingCmds:ptr8 = ptr8(self._pendingCmds)
+        # local object arrays for display framebuffers and post-frame commands
+        subframes:ptr32 = ptr32(array('L', [ptr8(self._subframes[0]), ptr8(self._subframes[1]), ptr8(self._subframes[2])]))
+        postFrameAdj:ptr32 = ptr32(array('L', [ptr8(self._postFrameAdj[0]), ptr8(self._postFrameAdj[1]), ptr8(self._postFrameAdj[2])]))
+
+        # hardware register access
+        spi0:ptr32 = ptr32(0x4003c000)
+        tmr:ptr32 = ptr32(0x40054000)
+        sio:ptr32 = ptr32(0xd0000000)
 
         # we want ptr32 vars for fast buffer copying
         bb = ptr32(self.buffer) ; bs = ptr32(self.shading)
-        b1 = ptr32(subframes[0]) ; b2 = ptr32(subframes[1]) ; b3 = ptr32(subframes[2])
+        b1 = ptr32(self._subframes[0]); b2 = ptr32(self._subframes[1]); b3 = ptr32(self._subframes[2])
 
         state[_ST_THREAD] = _THREAD_RUNNING
         while state[_ST_THREAD] == _THREAD_RUNNING:
@@ -530,66 +536,120 @@ class Grayscale:
             # framebuffers, sending the framebuffer data and various commands.
             fn = 0
             while fn < 3:
-                t0 = ticks_us()
+                time_out = tmr[10] + _PRE_FRAME_TIME_US
                 # the 'dc' output is used to switch the controller to receive
                 # commands (0) or frame data (1)
-                dc(0)
+                sio[6] = 1 << 17 # dc(0)
                 # send the pre-frame commands to 'park' the row counter
-                spi_write(preFrameCmds)
-                dc(1)
+                # spi_write(preFrameCmds)
+                i = 0
+                while i < 4:
+                    while (spi0[3] & 2) == 0: pass          # while !(SPI0->SR & SPI_SSPSR_TNF_BITS): pass
+                    spi0[2] = preFrameCmds[i]               # SPI0->DR = buff[i]
+                    i += 1
+                while (spi0[3] & 4) == 4: i = spi0[2]       # while SPI0->SR & SPI_SSPSR_RNE_BITS: read SPI0->DR
+                while (spi0[3] & 0x10) == 0x10: pass        # while SPI0->SR & SPI_SSPSR_BSY_BITS: pass
+                while (spi0[3] & 4) == 4: i = spi0[2]       # while SPI0->SR & SPI_SSPSR_RNE_BITS: read SPI0->DR
+
+                sio[5] = 1 << 17 # dc(1)
                 # and then send the frame
-                spi_write(subframes[fn])
-                dc(0)
+                #spi_write(subframes[fn])
+                i = 0
+                spibuff:ptr8 = ptr8(subframes[fn])
+                while i < 360:
+                    while (spi0[3] & 2) == 0: pass
+                    spi0[2] = spibuff[i]
+                    i += 1
+                while (spi0[3] & 4) == 4: i = spi0[2]
+                while (spi0[3] & 0x10) == 0x10: pass
+                while (spi0[3] & 4) == 4: i = spi0[2]
+
+                sio[6] = 1 << 17 # dc(0)
                 # send the first instance of the contrast adjust command
-                spi_write(postFrameAdj[fn])
+                #spi_write(postFrameAdj[fn])
+                i = 0
+                spibuff:ptr8 = ptr8(postFrameAdj[fn])
+                while i < 2:
+                    while (spi0[3] & 2) == 0: pass
+                    spi0[2] = spibuff[i]
+                    i += 1
+                while (spi0[3] & 4) == 4: i = spi0[2]
+                while (spi0[3] & 0x10) == 0x10: pass
+                while (spi0[3] & 4) == 4: i = spi0[2]
+
                 # wait for the pre-frame time to complete
-                sleep_us(_PRE_FRAME_TIME_US - int(ticks_diff(ticks_us(), t0)))
-                t0 = ticks_us()
+                while (tmr[10] - time_out) < 0:
+                    pass
+
+                time_out = tmr[10] + _FRAME_TIME_US
+
                 # now send the post-frame commands to display the frame
-                spi_write(postFrameCmds)
+                #spi_write(postFrameCmds)
+                i = 0
+                while i < 4:
+                    while (spi0[3] & 2) == 0: pass
+                    spi0[2] = postFrameCmds[i]
+                    i += 1
+
                 # and adjust the contrast for the specific frame number again.
                 # If we do not do this twice, the screen can glitch.
-                spi_write(postFrameAdj[fn])
-                # check if there's a pending frame copy required
-                # we only copy the paint framebuffers to the display framebuffers on
-                # the last frame to avoid screen-tearing artefacts
-                if (fn == 2) and (state[_ST_COPY_BUFFS] != 0):
-                    i = 0
-                    inv = -1 if state[_ST_INVERT] else 0
-                    # fast copy loop. By using using ptr32 vars we copy 3 bytes at a time.
-                    while i < _BUFF_INT_SIZE:
-                        v1 = bb[i] ^ inv
-                        v2 = bs[i]
-                        # this isn't a straight copy. Instead we are mapping:
-                        # in        out
-                        # 0 (0b00)  0 (0b000)
-                        # 1 (0b01)  7 (0b111)
-                        # 2 (0b10)  1 (0b001)
-                        # 3 (0b11)  3 (0b011)
-                        b1[i] = v1 | v2
-                        b2[i] = v2
-                        b3[i] = v1 & (v1 ^ v2)
-                        i += 1
-                    state[_ST_COPY_BUFFS] = 0
-                # check if there's a pending contrast/brightness value change
-                # again, we only adjust this after the last frame in the cycle
-                elif (fn == 2) and state[_ST_CONTRAST]:
-                    # Copy in the new contrast adjustments
-                    ptr8(postFrameAdj[0])[1] = postFrameAdjSrc[0]
-                    ptr8(postFrameAdj[1])[1] = postFrameAdjSrc[1]
-                    ptr8(postFrameAdj[2])[1] = postFrameAdjSrc[2]
-                    state[_ST_CONTRAST] = 0
-                # check if there are pending commands
-                elif state[_ST_PENDING_CMD]:
-                    # and send them
-                    spi_write(pending_cmds)
-                    state[_ST_PENDING_CMD] = 0
-                # two stage wait for frame time to complete
-                # we use sleep_ms() first to allow idle loop usage, with >>10 for a fast
-                # /1000 approximation
-                sleep_ms((_FRAME_TIME_US - int(ticks_diff(ticks_us(), t0))) >> 10)
-                # and finish with a sleep_us() to spin for the correct duration
-                sleep_us(_FRAME_TIME_US - int(ticks_diff(ticks_us(), t0)))
+                #spi_write(postFrameAdj[fn])
+                i = 0
+                spibuff:ptr8 = ptr8(postFrameAdj[fn])
+                while i < 2:
+                    while (spi0[3] & 2) == 0: pass
+                    spi0[2] = spibuff[i]
+                    i += 1
+                while (spi0[3] & 4) == 4: i = spi0[2]
+                while (spi0[3] & 0x10) == 0x10: pass
+                while (spi0[3] & 4) == 4: i = spi0[2]
+
+                if fn == 2:
+                    # check if there's a pending frame copy required
+                    # we only copy the paint framebuffers to the display framebuffers on
+                    # the last frame to avoid screen-tearing artefacts
+                    if state[_ST_COPY_BUFFS] != 0:
+                        i = 0
+                        inv = -1 if state[_ST_INVERT] else 0
+                        # fast copy loop. By using using ptr32 vars we copy 3 bytes at a time.
+                        while i < _BUFF_INT_SIZE:
+                            v1 = bb[i] ^ inv
+                            v2 = bs[i]
+                            # this isn't a straight copy. Instead we are mapping:
+                            # in        out        colour
+                            # 0 (0b00)  0 (0b000)  black
+                            # 1 (0b01)  5 (0b101)  dark gray
+                            # 2 (0b10)  7 (0b111)  white
+                            # 3 (0b11)  6 (0b110)  light gray
+                            b1[i] = v1 | v2
+                            b2[i] = v1
+                            b3[i] = v1 & (v1 ^ v2)
+                            i += 1
+                        state[_ST_COPY_BUFFS] = 0
+                    # check if there's a pending contrast/brightness value change
+                    elif state[_ST_CONTRAST]:
+                        # Copy in the new contrast adjustments
+                        ptr8(postFrameAdj[0])[1] = postFrameAdjSrc[0]
+                        ptr8(postFrameAdj[1])[1] = postFrameAdjSrc[1]
+                        ptr8(postFrameAdj[2])[1] = postFrameAdjSrc[2]
+                        state[_ST_CONTRAST] = 0
+                    # check if there are pending commands
+                    elif state[_ST_PENDING_CMD]:
+                        #spi_write(pending_cmds)
+                        i = 0
+                        while i < 8:
+                            while (spi0[3] & 2) == 0: pass
+                            spi0[2] = pendingCmds[i]
+                            i += 1
+                        while (spi0[3] & 4) == 4: i = spi0[2]
+                        while (spi0[3] & 0x10) == 0x10: pass
+                        while (spi0[3] & 4) == 4: i = spi0[2]
+                        state[_ST_PENDING_CMD] = 0
+
+                # wait for frame time to complete
+                while (tmr[10] - time_out) < 0:
+                    pass
+
                 fn += 1
 
         # mark that we've stopped
