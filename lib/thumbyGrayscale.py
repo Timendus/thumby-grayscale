@@ -1093,4 +1093,3 @@ class Sprite(_Sprite):
                 self.bitmapSHD = memoryview(self.bitmapSourceSHD)[offset:offset+self.bitmapByteCount]
 
 display = Grayscale()
-display.enableGrayscale()
