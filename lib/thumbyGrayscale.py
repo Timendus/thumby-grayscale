@@ -9,6 +9,9 @@ from array import array
 from thumbyButton import buttonA, buttonB, buttonU, buttonD, buttonL, buttonR
 from sys import modules
 
+__version__ = '3.0.0'
+
+
 emulator = None
 try:
     import emulator
