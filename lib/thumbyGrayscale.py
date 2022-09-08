@@ -1,72 +1,85 @@
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+
 import micropython
-import utime
-from machine import Pin, SPI, freq, idle
+from utime import sleep_ms, ticks_diff, ticks_ms, sleep_us
+from machine import Pin, SPI, freq, idle, mem32
 import _thread
-import os
+from os import stat
+from math import sqrt, floor
 import gc
 from array import array
+from thumbyButton import buttonA, buttonB, buttonU, buttonD, buttonL, buttonR
+from sys import modules
+
+__version__ = '3.0.0'
+
+
+emulator = None
 try:
-    from thumbyButton import buttonA, buttonB, buttonU, buttonD, buttonL, buttonR
-except:
-    # this will fail on Thumbys that have not been updated, but that's ok as we
-    # won't run anyway.
+    import emulator
+except ImportError:
     pass
-
-
-# When the Thumby boots up, it runs at 48MHz. main.py will switch this to 125MHz
-# before starting a game, but anything run in the code editor will be running at
-# the slower frequency. We want a bit of grunt for the GPU loop so we'll raise it
-# to at least 125MHz here.
-# We'll assume that if this code has been imported, then the greyscale display
-# code is going to be used and go ahead and change the frequency now. The
-# alternative is to wait until object creation time, but prior to that other
-# objects could have been instantiated that rely on knowing what the runtime CPU
-# frequency will be.
-if freq() < 125000000:
-    freq(125000000)
-
-
-def check_upython_version(major, minor, release):
-    up_ver = [int(s) for s in os.uname().release.split('.')]
-    if up_ver[0] > major:
-        return True
-    if up_ver[0] == major:
-        if up_ver[1] > minor:
-            return True
-        if up_ver[1] == minor:
-            if up_ver[2] >= release:
-                return True
-    return False
 
 
 class Sprite:
     @micropython.native
-    def __init__(self, width, height, bitmapData1, bitmapData2, x = 0, y=0, key=-1, mirrorX=False, mirrorY=False):
+    def __init__(self, width, height, bitmapData, x = 0, y=0, key=-1, mirrorX=False, mirrorY=False):
         self.width = width
         self.height = height
-        self.bitmapSource1 = bitmapData1
-        self.bitmapSource2 = bitmapData2
+        self.bitmapSource = bitmapData
         self.bitmapByteCount = width*(height//8)
         if(height%8):
             self.bitmapByteCount+=width
         self.frameCount = 1
         self.currentFrame = 0
-        if type(self.bitmapSource1)==str:
-            self.bitmap = bytearray(self.bitmapByteCount1)
-            self.file1 = open(self.bitmapSource1,'rb')
-            self.file1.readinto(self.bitmap1)
-            self.frameCount = os.stat(self.bitmapSource1)[6] // self.bitmapByteCount
-        elif type(self.bitmapSource1)==bytearray:
-            self.bitmap1 = memoryview(self.bitmapSource1)[0:self.bitmapByteCount]
-            self.frameCount = len(self.bitmapSource1) // self.bitmapByteCount
-        if type(self.bitmapSource2)==str:
-            self.bitmap2 = bytearray(self.bitmapByteCount)
-            self.file2 = open(self.bitmapSource2,'rb')
-            self.file2.readinto(self.bitmap2)
-            assert(self.frameCount == os.stat(self.bitmapSource2)[6] // self.bitmapByteCount)
-        elif type(self.bitmapSource2)==bytearray:
-            self.bitmap2 = memoryview(self.bitmapSource2)[0:self.bitmapByteCount]
-            assert(self.frameCount == len(self.bitmapSource2) // self.bitmapByteCount)
+        self._shaded = False
+        self._usesFile = False
+        if isinstance(bitmapData, (tuple, list)):
+            if (len(bitmapData) != 2) or (type(bitmapData[0]) != type(bitmapData[1])):
+                raise ValueError('bitmapData must be a bytearray, string, or tuple of two bytearrays or strings')
+            self._shaded = True
+            if isinstance(bitmapData[0], str):
+                self._usesFile = True
+                if stat(bitmapData[0])[6] != stat(bitmapData[1])[6]:
+                    raise ValueError('Sprite files must match in size')
+                self.bitmap = (bytearray(self.bitmapByteCount), bytearray(self.bitmapByteCount))
+                self.files = (open(bitmapData[0],'rb'),open(bitmapData[1],'rb'))
+                self.files[0].readinto(self.bitmap[0])
+                self.files[1].readinto(self.bitmap[1])
+                self.frameCount = stat(bitmapData[0])[6] // self.bitmapByteCount
+            elif isinstance(bitmapData[0], bytearray):
+                if len(bitmapData[0]) != len(bitmapData[1]):
+                    raise ValueError('Sprite bitplanes must match in size')
+                self.frameCount = len(bitmapData[0]) // self.bitmapByteCount
+                self.bitmap = [
+                    memoryview(bitmapData[0])[0:self.bitmapByteCount],
+                    memoryview(bitmapData[1])[0:self.bitmapByteCount]
+                ]
+            else:
+                raise ValueError('bitmapData must be a bytearray, string, or tuple of two bytearrays or strings')
+        elif isinstance(bitmapData, str):
+            self._usesFile = True
+            self.bitmap = bytearray(self.bitmapByteCount)
+            self.file = open(bitmapData,'rb')
+            self.file.readinto(self.bitmap)
+            self.frameCount = stat(bitmapData)[6] // self.bitmapByteCount
+        elif isinstance(bitmapData, bytearray):
+            self.bitmap = memoryview(bitmapData)[0:self.bitmapByteCount]
+            self.frameCount = len(bitmapData) // self.bitmapByteCount
+        else:
+            raise ValueError('bitmapData must be a bytearray, string, or tuple of two bytearrays or strings')
         self.x = x
         self.y = y
         self.key = key
@@ -82,77 +95,101 @@ class Sprite:
         if(frame >= 0 and (self.currentFrame is not frame % (self.frameCount))):
             self.currentFrame = frame % (self.frameCount)
             offset=self.bitmapByteCount*self.currentFrame
-            if type(self.bitmapSource1)==str:
-                self.file1.seek(offset)
-                self.file1.readinto(self.bitmap1)
-                #f.close()
-            elif type(self.bitmapSource1)==bytearray:
-                self.bitmap1 = memoryview(self.bitmapSource1)[offset:offset+self.bitmapByteCount]
-            if type(self.bitmapSource2)==str:
-                self.file2.seek(offset)
-                self.file2.readinto(self.bitmap2)
-                #f.close()
-            elif type(self.bitmapSource2)==bytearray:
-                self.bitmap2 = memoryview(self.bitmapSource2)[offset:offset+self.bitmapByteCount]
+            if self._shaded:
+                if self._usesFile:
+                    self.files[0].seek(offset)
+                    self.files[1].seek(offset)
+                    self.files[0].readinto(self.bitmap[0])
+                    self.files[1].readinto(self.bitmap[1])
+                else:
+                    self.bitmap[0] = memoryview(self.bitmapSource[0])[offset:offset+self.bitmapByteCount]
+                    self.bitmap[1] = memoryview(self.bitmapSource[1])[offset:offset+self.bitmapByteCount]
+            else:
+                if self._usesFile:
+                    self.file.seek(offset)
+                    self.file.readinto(self.bitmap)
+                else:
+                    self.bitmap = memoryview(self.bitmapSource)[offset:offset+self.bitmapByteCount]
 
 
-# You can't use const() to define class properties, so we'll define them here
-
-# The times below are calculated using phase 1 and phase 2 pre-charge periods of
-# 1 clock.
+# The times below are calculated using phase 1 and phase 2 pre-charge
+# periods of 1 clock.
 # Note that although the SSD1306 datasheet doesn't state it, the 50
-# clocks period per row _is_ a constant (datasheets for similar controllers from
-# the same manufacturer state this).
-# 530kHz is taken to be the highest nominal clock frequency. The calculations
-# shown provide the value in seconds, which can be multiplied by 1e6 to provide
-# a microsecond value.
-_Grayscale_pre_frame_time_us    = const( 785)     # 8 rows: ( 8*(1+1+50)) / 530e3 seconds
-_Grayscale_frame_time_us        = const(4709)     # 48 rows: (49*(1+1+50)) / 530e3 seconds
+# clocks period per row _is_ a constant (datasheets for similar
+# controllers from the same manufacturer state this).
+# 530kHz is taken to be the highest nominal clock frequency. The
+# calculations shown provide the value in seconds, which can be
+# multiplied by 1e6 to provide a microsecond value.
+_PRE_FRAME_TIME_US    = const( 785)     # 8 rows: ( 8*(1+1+50)) / 530e3 seconds
+_FRAME_TIME_US        = const(4709)     # 48 rows: (49*(1+1+50)) / 530e3 seconds
 
-_Grayscale_ThreadState_Starting   = const(0)
-_Grayscale_ThreadState_Stopped    = const(1)
-_Grayscale_ThreadState_Running    = const(2)
-_Grayscale_ThreadState_Stopping   = const(3)
+# Thread state variables for managing the Grayscale Thread
+_THREAD_STOPPED    = const(0)
+_THREAD_STARTING   = const(1)
+_THREAD_RUNNING    = const(2)
+_THREAD_STOPPING   = const(3)
 
-_Grayscale_StateIndex_State       = const(0)
-_Grayscale_StateIndex_CopyBuffs   = const(1)
-_Grayscale_StateIndex_PendingCmd  = const(2)
-_Grayscale_StateIndex_ContrastChng= const(3)
+# Indexes into the multipurpose state array, accessing a particular status
+_ST_THREAD       = const(0)
+_ST_COPY_BUFFS   = const(1)
+_ST_PENDING_CMD  = const(2)
+_ST_CONTRAST     = const(3)
+_ST_INVERT       = const(4)
+
+# Screen display size constants
+_WIDTH = const(72)
+_HEIGHT = const(40)
+_BUFF_SIZE = const((_HEIGHT // 8) * _WIDTH)
+_BUFF_INT_SIZE = const(_BUFF_SIZE // 4)
 
 
 class Grayscale:
 
+    # BLACK and WHITE is 0 and 1 to be compatible with the standard Thumby API
     BLACK     = 0
-    DARKGRAY  = 1
-    LIGHTGRAY = 2
-    WHITE     = 3
+    WHITE     = 1
+    DARKGRAY  = 2
+    LIGHTGRAY = 3
 
     def __init__(self):
-        if not check_upython_version(1, 19, 1):
-            raise NotImplementedError('Greyscale support requires at least Micropython v1.19.1. Please update via the Thumby code editor')
+        self._spi = SPI(0, sck=Pin(18), mosi=Pin(19))
+        self._dc = Pin(17)
+        self._cs = Pin(16)
+        self._res = Pin(20)
 
-        self.spi = SPI(0, sck=Pin(18), mosi=Pin(19))
-        self.dc = Pin(17)
-        self.cs = Pin(16)
-        self.res = Pin(20)
+        self._spi.init(baudrate=100 * 1000 * 1000, polarity=0, phase=0)
+        self._res.init(Pin.OUT, value=1)
+        self._dc.init(Pin.OUT, value=0)
+        self._cs.init(Pin.OUT, value=1)
 
-        self.spi.init(baudrate=100 * 1000 * 1000, polarity=0, phase=0)
-        self.res.init(Pin.OUT, value=1)
-        self.dc.init(Pin.OUT, value=0)
-        self.cs.init(Pin.OUT, value=1)
+        self._display_initialised = False
 
-        self.width = 72
-        self.height = 40
-        self.max_x = 72 - 1
-        self.max_y = 40 - 1
+        self.display = self     # This acts as both the GraphicsClass and SSD1306
+
+        self.width = _WIDTH
+        self.height = _HEIGHT
+        self.max_x = _WIDTH - 1
+        self.max_y = _HEIGHT - 1
 
         self.pages = self.height // 8
-        self.buffer_size = self.pages * self.width
-        self.buffer1 = bytearray(self.buffer_size)
-        self.buffer2 = bytearray(self.buffer_size)
-        self._buffer1 = bytearray(self.buffer_size)
-        self._buffer2 = bytearray(self.buffer_size)
-        self._buffer3 = bytearray(self.buffer_size)
+
+        # Draw buffers.
+        # This comprises of two full buffer lengths.
+        # The first section contains black and white compatible
+        # with the display buffer from the standard Thumby API,
+        # and the second contains the shading to create
+        # offwhite (lightgray) or offblack (darkgray).
+        self.drawBuffer = bytearray(_BUFF_SIZE*2)
+        # The base "buffer" matches compatibility with the std Thumby API.
+        self.buffer = memoryview(self.drawBuffer)[:_BUFF_SIZE]
+        # The "shading" buffer adds the grayscale
+        self.shading = memoryview(self.drawBuffer)[_BUFF_SIZE:]
+
+        self._subframes = array('O', [bytearray(_BUFF_SIZE),
+            bytearray(_BUFF_SIZE), bytearray(_BUFF_SIZE)])
+
+        if 'thumbyGraphics' in modules:
+            self.buffer[:] = modules['thumbyGraphics'].display.display.buffer
 
         # The method used to create reduced flicker greyscale using the SSD1306
         # uses certain assumptions about the internal behaviour of the
@@ -175,7 +212,7 @@ class Grayscale:
         # but seems to still have the desired effect.
         # 0xa8,0    Set multiplex ratio to 1
         # 0xd3,52   Set display offset to 52
-        self.pre_frame_cmds = bytearray([0xa8,0, 0xd3,52])
+        self._preFrameCmds = bytearray([0xa8,0, 0xd3,52])
         # Once the frame has been loaded into the display controller's GDRAM, we
         # set the controller to output 57 rows, and then delay for the nominal
         # time for 48 rows to be output.
@@ -188,73 +225,111 @@ class Grayscale:
         # 0xd3,x    Set display offset. Since rows are scanned in reverse, the
         #           calculation must work backwards from the last controller row.
         # 0xa8,57-1 Set multiplex ratio to 57
-        self.post_frame_cmds = bytearray([0xd3,40+(64-57), 0xa8,57-1])
+        self._postFrameCmds = bytearray([0xd3,_HEIGHT+(64-57), 0xa8,57-1])
 
         # We enhance the greys by modulating the contrast.
+        # 0x81,<val>        Set Bank0 contrast value to <val>
         # Use setting from thumby.cfg
-        brightnessSetting=2
+        self._brightness = 127
         try:
             with open("thumby.cfg", "r") as fh:
-                conf = fh.read().split(',')
-            for k in range(len(conf)):
-                if(conf[k] == "brightness"):
-                    brightnessSetting = int(conf[k+1])
-        except OSError:
+                _, _, conf = fh.read().partition("brightness,")
+                b = int(conf.split(',')[0])
+                # Set to the relevant brightness level
+                if b == 0: self._brightness = 0
+                if b == 1: self._brightness = 28
+                # Otherwise, leave it at 127
+        except (OSError, ValueError):
             pass
-        # but with a set of contrast values spanning the entire range provided by the controller
-        brightnessVals = [0,56,127]
-        brightnessVal = brightnessVals[brightnessSetting]
-        # 0x81,<val>        Set Bank0 contrast value to <val>
-        self.post_frame_adj = [bytearray([0x81,brightnessVal>>5]), bytearray([0x81,brightnessVal]), bytearray([0x81,(brightnessVal << 1) + 1])]
+        self._postFrameAdj = array('O', [bytearray([0x81,0]) for _ in range(3)])
+        self._postFrameAdjSrc = bytearray(3)
 
         # It's better to avoid using regular variables for thread sychronisation.
         # Instead, elements of an array/bytearray should be used.
         # We're using a uint32 array here, as that should hopefully further ensure
         # the atomicity of any element accesses.
-        self._state = array('I', [0,0,0,0xff])
+        # [thread_state, buff_copy_gate, pending_cmd_gate, constrast_change, inverted]
+        self._state = array('I', [_THREAD_STOPPED,0,0,0,0])
 
-        self.pending_cmds = bytearray([0] * 8)
+        self._pendingCmds = bytearray(8)
 
         self.setFont('lib/font5x7.bin', 5, 7, 1)
-        #self.setFont('lib/font8x8.bin', 8, 8, 0)
 
         self.lastUpdateEnd = 0
         self.frameRate = 0
-        self.frameTimeMs = 0
 
-        self.fill(Grayscale.BLACK)
-        self._copy_buffers()
-        self.init_display()
-        self.state = _Grayscale_ThreadState_Starting
+        self.brightness(self._brightness)
+        self._initEmuScreen()
+
         _thread.stack_size(2048)        # minimum stack size for RP2040 micropython port
-        _thread.start_new_thread(self._display_thread, ())
 
-        # Wait for the thread to successfully settle into a running state
-        while self._state[_Grayscale_StateIndex_State] != _Grayscale_ThreadState_Running:
-            idle()
 
 
     # allow use of 'with'
     def __enter__(self):
+        self.enableGrayscale()
         return self
     def __exit__(self, type, value, traceback):
-        self.stop()
+        self.disableGrayscale()
+
+
+    @micropython.viper
+    def _initEmuScreen(self):
+        if not emulator:
+            return
+        # Register draw buffer with emulator
+        Pin(2, Pin.OUT) # Ready display handshake pin
+        emulator.screen_breakpoint(ptr16(self.drawBuffer))
+        self._clearEmuFunctions()
+
+    def _clearEmuFunctions(self):
+        # Disable device controller functions
+        def _disabled(*arg, **kwdarg):
+            pass
+        self.invert = _disabled
+        self.reset = _disabled
+        self.poweron = _disabled
+        self.poweroff = _disabled
+        self.init_display = _disabled
+        self.write_cmd = _disabled
 
 
     def reset(self):
-        self.res(1)
-        utime.sleep_ms(1)
-        self.res(0)
-        utime.sleep_ms(10)
-        self.res(1)
-        utime.sleep_ms(10)
+        self._res(1)
+        sleep_ms(1)
+        self._res(0)
+        sleep_ms(10)
+        self._res(1)
+        sleep_ms(10)
 
 
     def init_display(self):
+        self._dc(0)
+        if self._display_initialised:
+            if self._state[_ST_THREAD] == _THREAD_STOPPED:
+                # (Re)Initialise the display for monocrhome timings
+                # 0xa8,0        Set multiplex ratio to 0 (pausing updates)
+                # 0xd3,52       Set display offset to 52
+                self._spi.write(bytearray([0xa8,0, 0xd3,52]))
+                sleep_us(_FRAME_TIME_US*3)
+                # 0xa8,39       Set multiplex ratio to height (releasing updates)
+                # 0xd3,0        Set display offset to 0
+                self._spi.write(bytearray([0xa8,_HEIGHT-1,0xd3,0]))
+                if self._state[_ST_INVERT]:
+                    self._spi.write(bytearray[0xa6 | 1])    # Resume device color inversion
+            else:
+                # Initialise the display for grayscale timings
+                # 0xae          Display Off
+                # 0xa8,0        Set multiplex ratio to 0 (will be changed later)
+                # 0xd3,0        Set display offset to 0 (will be changed later)
+                # 0xaf           Set display on
+                self._spi.write(bytearray([0xae, 0xa8,0, 0xd3,0, 0xaf]))
+            return
+
         self.reset()
-        self.cs(0)
-        self.dc(0)
-        # initialise as usual, except with shortest pre-charge periods and highest clock frequency
+        self._cs(0)
+        # initialise as usual, except with shortest pre-charge
+        # periods and highest clock frequency
         # 0xae          Display Off
         # 0x20,0x00     Set horizontal addressing mode
         # 0x40          Set display start line to 0
@@ -273,98 +348,138 @@ class Grayscale:
         # 0x8d,0x14     Charge bump setting: enable charge pump during display on
         # 0xad,0x30     Select internal 30uA Iref (max Iseg=240uA) during display on
         # 0xf           Set display on
-        self.spi.write(bytearray([
-            0xae, 0x20,0x00, 0x40, 0xa1, 0xa8,63, 0xc8, 0xd3,0, 0xda,0x12, 0xd5,0xf0, 0xd9,0x11, 0xdb,0x20, 0x81,0x7f,
+        self._spi.write(bytearray([
+            0xae, 0x20,0x00, 0x40, 0xa1, 0xa8,63, 0xc8, 0xd3,0, 0xda,0x12,
+            0xd5,0xf0, 0xd9,0x11, 0xdb,0x20, 0x81,0x7f,
             0xa4, 0xa6, 0x8d,0x14, 0xad,0x30, 0xaf]))
-        self.dc(1)
+        self._dc(1)
         # clear the entire GDRAM
         zero32 = bytearray([0] * 32)
         for _ in range(32):
-            self.spi.write(zero32)
-        self.dc(0)
+            self._spi.write(zero32)
+        self._dc(0)
         # set the GDRAM window
         # 0x21,28,99    Set column start (28) and end (99) addresses
         # 0x22,0,4      Set page start (0) and end (4) addresses0
-        self.spi.write(bytearray([0x21,28,99, 0x22,0,4]))
+        self._spi.write(bytearray([0x21,28,99, 0x22,0,4]))
+        self._display_initialised = True
 
 
-    def stop(self):
-        if self._state[_Grayscale_StateIndex_State] == _Grayscale_ThreadState_Running:
-            self._state[_Grayscale_StateIndex_State] = _Grayscale_ThreadState_Stopping
-            while self._state[_Grayscale_StateIndex_State] != _Grayscale_ThreadState_Stopped:
-                idle()
-        self.cs(1)
-        self.reset()
-        self.cs(0)
-        self.dc(0)
-        # reinitialise to the normal configuration. Copied from ssd1306.py
-        self.spi.write(bytearray([
-            0xae, 0x20,0x00, 0x40, 0xa1, 0xa8,self.height-1, 0xc8, 0xd3,0, 0xda,0x12, 0xd5,0x80,
-            0xd9,0xf1, 0xdb,0x20, 0x81,0x7f,
-            0xa4, 0xa6, 0x8d,0x14, 0xad,0x30, 0xaf,
-            0x21,28,99, 0x22,0,4]))
-        self.cs(1)
+    def enableGrayscale(self):
+        if emulator:
+            # Activate grayscale emulation
+            emulator.screen_breakpoint(1)
+            self.show()
+            return
+
+        if self._state[_ST_THREAD] == _THREAD_RUNNING:
+            return
+
+        self._state[_ST_THREAD] = _THREAD_STARTING
+        self.init_display()
+        _thread.start_new_thread(self._display_thread, ())
+
+        # Wait for the thread to successfully settle into a running state
+        while self._state[_ST_THREAD] != _THREAD_RUNNING:
+            idle()
+
+
+    def disableGrayscale(self):
+        if emulator:
+            # Disable grayscale emulation
+            emulator.screen_breakpoint(0)
+            self.show()
+            return
+
+        if self._state[_ST_THREAD] != _THREAD_RUNNING:
+            return
+        self._state[_ST_THREAD] = _THREAD_STOPPING
+        while self._state[_ST_THREAD] != _THREAD_STOPPED:
+            idle()
+        # Refresh the image to the B/W form
+        self.init_display()
+        self.show()
+        # Change back to the original (unmodulated) brightness setting
+        self.brightness(self._brightness)
+
 
     @micropython.native
     def write_cmd(self, cmd):
-        if cmd is list:
+        if isinstance(cmd, list):
             cmd = bytearray(cmd)
-        elif not cmd is bytearray:
+        elif not isinstance(cmd, bytearray):
             cmd = bytearray([cmd])
-        if self._state[_Grayscale_StateIndex_State] == _Grayscale_ThreadState_Running:
-            pending_cmds = self.pending_cmds
-            if len(cmd) > len(pending_cmds):
+        if self._state[_ST_THREAD] == _THREAD_RUNNING:
+            pendingCmds = self._pendingCmds
+            if len(cmd) > len(pendingCmds):
                 # We can't just break up the longer list of commands automatically, as we
                 # might end up separating a command and its parameter(s).
-                raise ValueError('Cannot send more than %u bytes using write_cmd()' % len(pending_cmds))
+                raise ValueError('Cannot send more than %u bytes using write_cmd()' % len(pendingCmds))
             i = 0
             while i < len(cmd):
-                pending_cmds[i] = cmd[i]
+                pendingCmds[i] = cmd[i]
                 i += 1
             # Fill the rest of the bytearray with display controller NOPs
             # This is probably better than having to create slice or a memoryview in the GPU thread
-            while i < len(pending_cmds):
-                pending_cmds[i] = 0x3e
+            while i < len(pendingCmds):
+                pendingCmds[i] = 0x3e
                 i += 1
-            self._state[_Grayscale_StateIndex_PendingCmd] = 1
-            while self._state[_Grayscale_StateIndex_PendingCmd]:
+            self._state[_ST_PENDING_CMD] = 1
+            while self._state[_ST_PENDING_CMD]:
                 idle()
         else:
-            self.dc(0)
-            self.spi.write(cmd)
+            self._dc(0)
+            self._spi.write(cmd)
 
     def poweroff(self):
         self.write_cmd(0xae)
     def poweron(self):
         self.write_cmd(0xaf)
 
+
+    @micropython.viper
+    def invert(self, invert:int):
+        state = ptr32(self._state)
+        invert = 1 if invert else 0
+        state[_ST_INVERT] = invert
+        state[_ST_COPY_BUFFS] = 1
+        if state[_ST_THREAD] != _THREAD_RUNNING:
+            self.write_cmd(0xa6 | invert)
+
+
     @micropython.viper
     def show(self):
-        state:ptr32 = ptr32(self._state)
-        state[_Grayscale_StateIndex_CopyBuffs] = 1
-        if state[_Grayscale_StateIndex_State] != _Grayscale_ThreadState_Running:
-            return
-        while state[_Grayscale_StateIndex_CopyBuffs] != 0:
-            idle()
+        state = ptr32(self._state)
+        if state[_ST_THREAD] == _THREAD_RUNNING:
+            state[_ST_COPY_BUFFS] = 1
+            while state[_ST_COPY_BUFFS] != 0:
+                idle()
+        elif emulator:
+            mem32[0xD0000000+0x01C] = 1 << 2
+        else:
+            self._dc(1)
+            self._spi.write(self.buffer)
 
     @micropython.native
     def show_async(self):
-        self._state[_Grayscale_StateIndex_CopyBuffs] = 1
+        state = ptr32(self._state)
+        if state[_ST_THREAD] == _THREAD_RUNNING:
+            state[_ST_COPY_BUFFS] = 1
+        else:
+            self.show()
 
 
     @micropython.native
     def setFPS(self, newFrameRate):
         self.frameRate = newFrameRate
-        if newFrameRate != 0:
-            self.frameTimeMs = 1000 // newFrameRate
 
     @micropython.native
     def update(self):
         self.show()
         if self.frameRate > 0:
-            frameTimeMs = self.frameTimeMs
+            frameTimeMs = 1000 // self.frameRate
             lastUpdateEnd = self.lastUpdateEnd
-            frameTimeRemaining = frameTimeMs - utime.ticks_diff(utime.ticks_ms(), lastUpdateEnd)
+            frameTimeRemaining = frameTimeMs - ticks_diff(ticks_ms(), lastUpdateEnd)
             while frameTimeRemaining > 1:
                 buttonA.update()
                 buttonB.update()
@@ -372,393 +487,337 @@ class Grayscale:
                 buttonD.update()
                 buttonL.update()
                 buttonR.update()
-                utime.sleep_ms(1)
-                frameTimeRemaining = frameTimeMs - utime.ticks_diff(utime.ticks_ms(), lastUpdateEnd)
+                sleep_ms(1)
+                frameTimeRemaining = frameTimeMs - ticks_diff(ticks_ms(), lastUpdateEnd)
             while frameTimeRemaining > 0:
-                frameTimeRemaining = frameTimeMs - utime.ticks_diff(utime.ticks_ms(), lastUpdateEnd)
-        self.lastUpdateEnd = utime.ticks_ms()
+                frameTimeRemaining = frameTimeMs - ticks_diff(ticks_ms(), lastUpdateEnd)
+        self.lastUpdateEnd = ticks_ms()
 
-
-    def brightness(self, c):
-        if c < 0:
-            c = 0
-        elif c > 127:
-            c = 127
-        self._state[_Grayscale_StateIndex_ContrastChng] = c
-
-    def brightness_sync(self, c):
-        if c < 0:
-            c = 0
-        elif c > 127:
-            c = 127
-        self._state[_Grayscale_StateIndex_ContrastChng] = c
-        if self._state[_Grayscale_StateIndex_State] != _Grayscale_ThreadState_Running:
-            return
-        while self._state[_Grayscale_StateIndex_ContrastChng] != 0xff:
-            idle()
 
     @micropython.viper
-    def _copy_buffers(self):
-        b1:ptr32 = ptr32(self.buffer1) ; b2:ptr32 = ptr32(self.buffer2)
-        _b1:ptr32 = ptr32(self._buffer1) ; _b2:ptr32 = ptr32(self._buffer2) ; _b3:ptr32 = ptr32(self._buffer3)
-        i:int = 0
-        while i < 90:
-            v1:int = b1[i]
-            v2:int = b2[i]
-            _b1[i] = v1 | v2
-            _b2[i] = v2
-            _b3[i] = v1 & v2
-            i += 1
-        self._state[_Grayscale_StateIndex_CopyBuffs] = 0
+    def brightness(self, c:int):
+        if c < 0: c = 0
+        if c > 127: c = 127
+        state = ptr32(self._state)
+        postFrameAdj = self._postFrameAdj
+        postFrameAdjSrc = ptr8(self._postFrameAdjSrc)
+
+        # Provide 3 different subframe levels for the GPU
+        # Low (0): 0, 5, 15
+        # Mid (28): 4, 42, 173
+        # High (127):  9, 84, 255
+        cc = int(floor(sqrt(c<<17)))
+        postFrameAdjSrc[0] = (cc*30>>12)+6
+        postFrameAdjSrc[1] = (cc*72>>12)+14
+        c3 = (cc*340>>12)+20
+        postFrameAdjSrc[2] = c3 if c3 < 255 else 255
+
+        # Apply to display, GPU, and emulator
+        if state[_ST_THREAD] == _THREAD_RUNNING:
+            state[_ST_CONTRAST] = 1
+        else:
+            # Copy in the new contrast adjustments for when the GPU starts
+            postFrameAdj[0][1] = postFrameAdjSrc[0]
+            postFrameAdj[1][1] = postFrameAdjSrc[1]
+            postFrameAdj[2][1] = postFrameAdjSrc[2]
+            # Apply the contrast directly to the display or emulator
+            if emulator:
+                emulator.brightness_breakpoint(c)
+            else:
+                self.write_cmd([0x81, c])
+        setattr(self, '_brightness', c)
 
 
     # GPU (Gray Processing Unit) thread function
     @micropython.viper
     def _display_thread(self):
+
+        # cache various instance variables and buffers
+        postFrameAdjSrc = ptr8(self._postFrameAdjSrc)
+        state = ptr32(self._state)
+        preFrameCmds:ptr8 = ptr8(self._preFrameCmds)
+        postFrameCmds:ptr8 = ptr8(self._postFrameCmds)
+        pendingCmds:ptr8 = ptr8(self._pendingCmds)
         # local object arrays for display framebuffers and post-frame commands
-        buffers = array('O', [self._buffer1, self._buffer2, self._buffer3])
-        post_frame_adj = array('O', [self.post_frame_adj[0], self.post_frame_adj[1], self.post_frame_adj[2]])
-        # cache various instance variables, buffers, and functions/methods
-        state:ptr32 = ptr32(self._state)
-        spi_write = self.spi.write
-        dc = self.dc
-        pre_frame_cmds:ptr = self.pre_frame_cmds
-        post_frame_cmds:ptr = self.post_frame_cmds
-        ticks_us = utime.ticks_us
-        ticks_diff = utime.ticks_diff
-        sleep_ms = utime.sleep_ms
-        sleep_us = utime.sleep_us
+        subframes:ptr32 = ptr32(array('L', [ptr8(self._subframes[0]), ptr8(self._subframes[1]), ptr8(self._subframes[2])]))
+        postFrameAdj:ptr32 = ptr32(array('L', [ptr8(self._postFrameAdj[0]), ptr8(self._postFrameAdj[1]), ptr8(self._postFrameAdj[2])]))
+
+        # hardware register access
+        spi0:ptr32 = ptr32(0x4003c000)
+        tmr:ptr32 = ptr32(0x40054000)
+        sio:ptr32 = ptr32(0xd0000000)
 
         # we want ptr32 vars for fast buffer copying
-        b1:ptr32 = ptr32(self.buffer1) ; b2:ptr32 = ptr32(self.buffer2)
-        _b1:ptr32 = ptr32(self._buffer1) ; _b2:ptr32 = ptr32(self._buffer2) ; _b3:ptr32 = ptr32(self._buffer3)
+        bb = ptr32(self.buffer) ; bs = ptr32(self.shading)
+        b1 = ptr32(self._subframes[0]); b2 = ptr32(self._subframes[1]); b3 = ptr32(self._subframes[2])
 
-        # the viper compiler doesn't need variables predeclared with the type
-        # decoration like this, but I think it's a bit cleaner
-        fn:int ; i:int ; t0:int
-        v1:int ; v2:int ; contrast:int
+        state[_ST_THREAD] = _THREAD_RUNNING
+        while state[_ST_THREAD] == _THREAD_RUNNING:
+            # this is the main GPU loop. We cycle through each of the 3 display
+            # framebuffers, sending the framebuffer data and various commands.
+            fn = 0
+            while fn < 3:
+                time_out = tmr[10] + _PRE_FRAME_TIME_US
+                # the 'dc' output is used to switch the controller to receive
+                # commands (0) or frame data (1)
+                sio[6] = 1 << 17 # dc(0)
+                # send the pre-frame commands to 'park' the row counter
+                # spi_write(preFrameCmds)
+                i = 0
+                while i < 4:
+                    while (spi0[3] & 2) == 0: pass          # while !(SPI0->SR & SPI_SSPSR_TNF_BITS): pass
+                    spi0[2] = preFrameCmds[i]               # SPI0->DR = buff[i]
+                    i += 1
+                while (spi0[3] & 4) == 4: i = spi0[2]       # while SPI0->SR & SPI_SSPSR_RNE_BITS: read SPI0->DR
+                while (spi0[3] & 0x10) == 0x10: pass        # while SPI0->SR & SPI_SSPSR_BSY_BITS: pass
+                while (spi0[3] & 4) == 4: i = spi0[2]       # while SPI0->SR & SPI_SSPSR_RNE_BITS: read SPI0->DR
 
-        state[_Grayscale_StateIndex_State] = _Grayscale_ThreadState_Running
-        while True:
-            while state[_Grayscale_StateIndex_State] == _Grayscale_ThreadState_Running:
-                # this is the main GPU loop. We cycle through each of the 3 display
-                # framebuffers, sending the framebuffer data and various commands.
-                fn = 0
-                while fn < 3:
-                    t0 = ticks_us()
-                    # the 'dc' output is used to switch the controller to receive
-                    # commands (0) or frame data (1)
-                    dc(0)
-                    # send the pre-frame commands to 'park' the row counter
-                    spi_write(pre_frame_cmds)
-                    dc(1)
-                    # and then send the frame
-                    spi_write(buffers[fn])
-                    dc(0)
-                    # send the first instance of the contrast adjust command
-                    spi_write(post_frame_adj[fn])
-                    # wait for the pre-frame time to complete
-                    sleep_us(_Grayscale_pre_frame_time_us - int(ticks_diff(ticks_us(), t0)))
-                    t0 = ticks_us()
-                    # now send the post-frame commands to display the frame
-                    spi_write(post_frame_cmds)
-                    # and adjust the contrast for the specific frame number again.
-                    # If we do not do this twice, the screen can glitch.
-                    spi_write(post_frame_adj[fn])
+                sio[5] = 1 << 17 # dc(1)
+                # and then send the frame
+                #spi_write(subframes[fn])
+                i = 0
+                spibuff:ptr8 = ptr8(subframes[fn])
+                while i < 360:
+                    while (spi0[3] & 2) == 0: pass
+                    spi0[2] = spibuff[i]
+                    i += 1
+                while (spi0[3] & 4) == 4: i = spi0[2]
+                while (spi0[3] & 0x10) == 0x10: pass
+                while (spi0[3] & 4) == 4: i = spi0[2]
+
+                sio[6] = 1 << 17 # dc(0)
+                # send the first instance of the contrast adjust command
+                #spi_write(postFrameAdj[fn])
+                i = 0
+                spibuff:ptr8 = ptr8(postFrameAdj[fn])
+                while i < 2:
+                    while (spi0[3] & 2) == 0: pass
+                    spi0[2] = spibuff[i]
+                    i += 1
+                while (spi0[3] & 4) == 4: i = spi0[2]
+                while (spi0[3] & 0x10) == 0x10: pass
+                while (spi0[3] & 4) == 4: i = spi0[2]
+
+                # wait for the pre-frame time to complete
+                while (tmr[10] - time_out) < 0:
+                    pass
+
+                time_out = tmr[10] + _FRAME_TIME_US
+
+                # now send the post-frame commands to display the frame
+                #spi_write(postFrameCmds)
+                i = 0
+                while i < 4:
+                    while (spi0[3] & 2) == 0: pass
+                    spi0[2] = postFrameCmds[i]
+                    i += 1
+
+                # and adjust the contrast for the specific frame number again.
+                # If we do not do this twice, the screen can glitch.
+                #spi_write(postFrameAdj[fn])
+                i = 0
+                spibuff:ptr8 = ptr8(postFrameAdj[fn])
+                while i < 2:
+                    while (spi0[3] & 2) == 0: pass
+                    spi0[2] = spibuff[i]
+                    i += 1
+                while (spi0[3] & 4) == 4: i = spi0[2]
+                while (spi0[3] & 0x10) == 0x10: pass
+                while (spi0[3] & 4) == 4: i = spi0[2]
+
+                if fn == 2:
                     # check if there's a pending frame copy required
                     # we only copy the paint framebuffers to the display framebuffers on
                     # the last frame to avoid screen-tearing artefacts
-                    if (fn == 2) and (state[_Grayscale_StateIndex_CopyBuffs] != 0):
+                    if state[_ST_COPY_BUFFS] != 0:
                         i = 0
+                        inv = -1 if state[_ST_INVERT] else 0
                         # fast copy loop. By using using ptr32 vars we copy 3 bytes at a time.
-                        while i < 90:
-                            v1 = b1[i]
-                            v2 = b2[i]
+                        while i < _BUFF_INT_SIZE:
+                            v1 = bb[i] ^ inv
+                            v2 = bs[i]
                             # this isn't a straight copy. Instead we are mapping:
-                            # in        out
-                            # 0 (0b00)  0 (0b000)
-                            # 1 (0b01)  1 (0b001)
-                            # 2 (0b10)  3 (0b011)
-                            # 3 (0b11)  7 (0b111)
-                            _b1[i] = v1 | v2
-                            _b2[i] = v2
-                            _b3[i] = v1 & v2
+                            # in        out        colour
+                            # 0 (0b00)  0 (0b000)  black
+                            # 1 (0b01)  5 (0b101)  dark gray
+                            # 2 (0b10)  7 (0b111)  white
+                            # 3 (0b11)  6 (0b110)  light gray
+                            b1[i] = v1 | v2
+                            b2[i] = v1
+                            b3[i] = v1 & (v1 ^ v2)
                             i += 1
-                        state[_Grayscale_StateIndex_CopyBuffs] = 0
+                        state[_ST_COPY_BUFFS] = 0
                     # check if there's a pending contrast/brightness value change
-                    # again, we only adjust this after the last frame in the cycle
-                    elif (fn == 2) and (state[_Grayscale_StateIndex_ContrastChng] != 0xffff):
-                        contrast = state[_Grayscale_StateIndex_ContrastChng]
-                        state[_Grayscale_StateIndex_ContrastChng] = 0xffff
-                        # shift the value to provide 3 different levels
-                        post_frame_adj[0][1] = contrast >> 5
-                        post_frame_adj[1][1] = contrast >> 1
-                        post_frame_adj[2][1] = (contrast << 1) + 1
+                    elif state[_ST_CONTRAST]:
+                        # Copy in the new contrast adjustments
+                        ptr8(postFrameAdj[0])[1] = postFrameAdjSrc[0]
+                        ptr8(postFrameAdj[1])[1] = postFrameAdjSrc[1]
+                        ptr8(postFrameAdj[2])[1] = postFrameAdjSrc[2]
+                        state[_ST_CONTRAST] = 0
                     # check if there are pending commands
-                    elif state[_Grayscale_StateIndex_PendingCmd]:
-                        # and send them
-                        spi_write(pending_cmds)
-                        state[_Grayscale_StateIndex_PendingCmd] = 0
-                    # two stage wait for frame time to complete
-                    # we use sleep_ms() first to allow idle loop usage, with >>10 for a fast
-                    # /1000 approximation
-                    sleep_ms((_Grayscale_frame_time_us - int(ticks_diff(ticks_us(), t0))) >> 10)
-                    # and finish with a sleep_us() to spin for the correct duration
-                    sleep_us(_Grayscale_frame_time_us - int(ticks_diff(ticks_us(), t0)))
-                    fn += 1
-            # if the state has changed to 'stopping'
-            if state[_Grayscale_StateIndex_State] == _Grayscale_ThreadState_Stopping:
-                i = 0
-                # blank out framebuffer 1
-                while i < 90:
-                    _b1[i] = 0
-                    i += 1
-                dc(1)
-                # and send it to clear the screen
-                spi_write(buffers[0])
-                # and mark that we've stopped
-                state[_Grayscale_StateIndex_State] = _Grayscale_ThreadState_Stopped
-                # the thread can now exit
-                return
+                    elif state[_ST_PENDING_CMD]:
+                        #spi_write(pending_cmds)
+                        i = 0
+                        while i < 8:
+                            while (spi0[3] & 2) == 0: pass
+                            spi0[2] = pendingCmds[i]
+                            i += 1
+                        while (spi0[3] & 4) == 4: i = spi0[2]
+                        while (spi0[3] & 0x10) == 0x10: pass
+                        while (spi0[3] & 4) == 4: i = spi0[2]
+                        state[_ST_PENDING_CMD] = 0
+
+                # wait for frame time to complete
+                while (tmr[10] - time_out) < 0:
+                    pass
+
+                fn += 1
+
+        # mark that we've stopped
+        state[_ST_THREAD] = _THREAD_STOPPED
 
 
     @micropython.viper
     def fill(self, colour:int):
-        buffer1:ptr32 = ptr32(self.buffer1)
-        buffer2:ptr32 = ptr32(self.buffer2)
-        f1:int = -1 if colour & 1 else 0
-        f2:int = -1 if colour & 2 else 0
-        i:int = 0
-        while i < 90:
-            buffer1[i] = f1
-            buffer2[i] = f2
+        buffer = ptr32(self.buffer)
+        shading = ptr32(self.shading)
+        f1 = -1 if colour & 1 else 0
+        f2 = -1 if colour & 2 else 0
+        i = 0
+        while i < _BUFF_INT_SIZE:
+            buffer[i] = f1
+            shading[i] = f2
             i += 1
+
 
     @micropython.viper
     def drawFilledRectangle(self, x:int, y:int, width:int, height:int, colour:int):
-        if x > 71: return
-        if y > 39: return
-        if width <= 0: return
-        if height <= 0: return
+        if x >= _WIDTH or y >= _HEIGHT: return
+        if width <= 0 or height <= 0: return
         if x < 0:
             width += x
             x = 0
         if y < 0:
             height += y
             y = 0
-        x2:int = x + width
-        y2:int = y + height
-        if x2 > 72:
-            x2 = 72
-            width = 72 - x
-        if y2 > 40:
-            y2 = 40
-            height = 40 - y
+        x2 = x + width
+        y2 = y + height
+        if x2 > _WIDTH:
+            x2 = _WIDTH
+            width = _WIDTH - x
+        if y2 > _HEIGHT:
+            y2 = _HEIGHT
+            height = _HEIGHT - y
 
-        buffer1 = ptr8(self.buffer1)
-        buffer2 = ptr8(self.buffer2)
+        buffer = ptr8(self.buffer)
+        shading = ptr8(self.shading)
 
-        o:int = (y >> 3) * 72
-        oe:int = o + x2
+        o = (y >> 3) * _WIDTH
+        oe = o + x2
         o += x
-        strd:int = 72 - width
+        strd = _WIDTH - width
 
-        v1:int = 0xff if colour & 1 else 0
-        v2:int = 0xff if colour & 2 else 0
+        c1 = colour & 1
+        c2 = colour & 2
+        v1 = 0xff if c1 else 0
+        v2 = 0xff if c2 else 0
 
-        yb:int = y & 7
-        ybh:int = 8 - yb
+        yb = y & 7
+        ybh = 8 - yb
         if height <= ybh:
-            m:int = ((1 << height) - 1) << yb
+            m = ((1 << height) - 1) << yb
         else:
-            m:int = 0xff << yb
-        im:int = 255-m
+            m = 0xff << yb
+        im = 255-m
         while o < oe:
-            if colour & 1:
-                buffer1[o] |= m
+            if c1:
+                buffer[o] |= m
             else:
-                buffer1[o] &= im
-            if colour & 2:
-                buffer2[o] |= m
+                buffer[o] &= im
+            if c2:
+                shading[o] |= m
             else:
-                buffer2[o] &= im
+                shading[o] &= im
             o += 1
         height -= ybh
         while height >= 8:
             o += strd
-            oe += 72
+            oe += _WIDTH
             while o < oe:
-                buffer1[o] = v1
-                buffer2[o] = v2
+                buffer[o] = v1
+                shading[o] = v2
                 o += 1
             height -= 8
         if height > 0:
             o += strd
-            oe += 72
-            m:int = (1 << height) - 1
-            im:int = 255-m
+            oe += _WIDTH
+            m = (1 << height) - 1
+            im = 255-m
             while o < oe:
-                if colour & 1:
-                    buffer1[o] |= m
+                if c1:
+                    buffer[o] |= m
                 else:
-                    buffer1[o] &= im
-                if colour & 2:
-                    buffer2[o] |= m
+                    buffer[o] &= im
+                if c2:
+                    shading[o] |= m
                 else:
-                    buffer2[o] &= im
+                    shading[o] &= im
                 o += 1
-
-
-
-    @micropython.viper
-    def drawHLine(self, x:int, y:int, width:int, colour:int):
-        if y < 0 or y >= 40: return
-        if x >= 72: return
-        if width <= 0: return
-        if x < 0:
-            width += x
-            x = 0
-        x2:int = x + width
-        if x2 > 72:
-            x2 = 72
-        o:int = (y >> 3) * 72
-        oe:int = o + x2
-        o += x
-        m:int = 1 << (y & 7)
-        im:int = 255-m
-        buffer1 = ptr8(self.buffer1)
-        buffer2 = ptr8(self.buffer2)
-        if colour == 0:
-            while o < oe:
-                buffer1[o] &= im
-                buffer2[o] &= im
-                o += 1
-        elif colour == 1:
-            while o < oe:
-                buffer1[o] |= m
-                buffer2[o] &= im
-                o += 1
-        elif colour == 2:
-            while o < oe:
-                buffer1[o] &= im
-                buffer2[o] |= m
-                o += 1
-        elif colour == 3:
-            while o < oe:
-                buffer1[o] |= m
-                buffer2[o] |= m
-                o += 1
-
-
-    @micropython.viper
-    def drawVLine(self, x:int, y:int, height:int, colour:int):
-        if x < 0 or x >= 72: return
-        if y >= 40: return
-        if height <= 0: return
-        if y < 0:
-            height += y
-            y = 0
-        if (y + height) > 40:
-            height = 40 - y
-
-        buffer1 = ptr8(self.buffer1)
-        buffer2 = ptr8(self.buffer2)
-
-        o:int = (y >> 3) * 72 + x
-
-        v1:int = 0xff if colour & 1 else 0
-        v2:int = 0xff if colour & 2 else 0
-
-        yb:int = y & 7
-        ybh:int = 8 - yb
-        if height <= ybh:
-            m:int = ((1 << height) - 1) << yb
-        else:
-            m:int = 0xff << yb
-        im:int = 255-m
-        if colour & 1:
-            buffer1[o] |= m
-        else:
-            buffer1[o] &= im
-        if colour & 2:
-            buffer2[o] |= m
-        else:
-            buffer2[o] &= im
-        height -= ybh
-        while height >= 8:
-            o += 72
-            buffer1[o] = v1
-            buffer2[o] = v2
-            height -= 8
-        if height > 0:
-            o += 72
-            m:int = (1 << height) - 1
-            im:int = 255-m
-            if colour & 1:
-                buffer1[o] |= m
-            else:
-                buffer1[o] &= im
-            if colour & 2:
-                buffer2[o] |= m
-            else:
-                buffer2[o] &= im
 
 
     @micropython.viper
     def drawRectangle(self, x:int, y:int, width:int, height:int, colour:int):
-        self.drawHLine(x, y, width, colour)
-        self.drawHLine(x, y+height-1, width, colour)
-        self.drawVLine(x, y, height, colour)
-        self.drawVLine(x+width-1, y, height, colour)
+        dfr = self.drawFilledRectangle
+        dfr(x, y, width, 1, colour)
+        dfr(x, y, 1, height, colour)
+        dfr(x, y+height-1, width, 1, colour)
+        dfr(x+width-1, y, 1, height, colour)
 
 
     @micropython.viper
     def setPixel(self, x:int, y:int, colour:int):
-        if x < 0 or x >= 72 or y < 0 or y >= 40:
+        if x < 0 or x >= _WIDTH or y < 0 or y >= _HEIGHT:
             return
-        o:int = (y >> 3) * 72 + x
-        m:int = 1 << (y & 7)
-        im:int = 255-m
-        buffer1 = ptr8(self.buffer1)
-        buffer2 = ptr8(self.buffer2)
+        o = (y >> 3) * _WIDTH + x
+        m = 1 << (y & 7)
+        im = 255-m
+        buffer = ptr8(self.buffer)
+        shading = ptr8(self.shading)
         if colour & 1:
-            buffer1[o] |= m
+            buffer[o] |= m
         else:
-            buffer1[o] &= im
+            buffer[o] &= im
         if colour & 2:
-            buffer2[o] |= m
+            shading[o] |= m
         else:
-            buffer2[o] &= im
+            shading[o] &= im
 
     @micropython.viper
     def getPixel(self, x:int, y:int) -> int:
-        if x < 0 or x >= 72 or y < 0 or y >= 40:
+        if x < 0 or x >= _WIDTH or y < 0 or y >= _HEIGHT:
             return 0
-        o:int = (y >> 3) * 72 + x
-        m:int = 1 << (y & 7)
-        buffer1 = ptr8(self.buffer1)
-        buffer2 = ptr8(self.buffer2)
-        colour:int = 0
-        if buffer1[o] & m:
+        o = (y >> 3) * _WIDTH + x
+        m = 1 << (y & 7)
+        buffer = ptr8(self.buffer)
+        shading = ptr8(self.shading)
+        colour = 0
+        if buffer[o] & m:
             colour = 1
-        if buffer2[o] & m:
+        if shading[o] & m:
             colour |= 2
         return colour
 
     @micropython.viper
     def drawLine(self, x0:int, y0:int, x1:int, y1:int, colour:int):
         if x0 == x1:
-            if y0 == y1:
-                self.setPixel(x0, y0, colour)
-            else:
-                self.drawHLine(x0, y0, x1-x0, colour)
+            self.drawFilledRectangle(x0, y0, 1, y1 - y0, colour)
             return
         if y0 == y1:
-            self.drawVLine(x0, y0, y1-y0, colour)
+            self.drawFilledRectangle(x0, y0, x1 - x0, 1, colour)
             return
-        dx:int = x1 - x0
-        dy:int = y1 - y0
-        sx:int = 1
+        dx = x1 - x0
+        dy = y1 - y0
+        sx = 1
         # y increment is always 1
         if dy < 0:
             x0,x1 = x1,x0
@@ -768,34 +827,36 @@ class Grayscale:
         if dx < 0:
             dx = 0 - dx
             sx = -1
-        x:int = x0
-        y:int = y0
-        buffer1:ptr8 = ptr8(self.buffer1)
-        buffer2:ptr8 = ptr8(self.buffer2)
-        cx:int ; o:int
+        x = x0
+        y = y0
+        buffer = ptr8(self.buffer)
+        shading = ptr8(self.shading)
 
-        o:int = (y >> 3) * 72 + x
-        m:int = 1 << (y & 7)
-        im:int = 255-m
+        o = (y >> 3) * _WIDTH + x
+        m = 1 << (y & 7)
+        im = 255-m
+        c1 = colour & 1
+        c2 = colour & 2
 
         if dx > dy:
-            err:int = dx >> 1
+            err = dx >> 1
+            x1 += 1
             while x != x1:
-                if 0 <= x < 72 and 0 <= y < 40:
-                    if colour & 1:
-                        buffer1[o] |= m
+                if 0 <= x < _WIDTH and 0 <= y < _HEIGHT:
+                    if c1:
+                        buffer[o] |= m
                     else:
-                        buffer1[o] &= im
-                    if colour & 2:
-                        buffer2[o] |= m
+                        buffer[o] &= im
+                    if c2:
+                        shading[o] |= m
                     else:
-                        buffer2[o] &= im
+                        shading[o] &= im
                 err -= dy
                 if err < 0:
                     y += 1
                     m <<= 1
                     if m & 0x100:
-                        o += 72
+                        o += _WIDTH
                         m = 1
                         im = 0xfe
                     else:
@@ -804,17 +865,18 @@ class Grayscale:
                 x += sx
                 o += sx
         else:
-            err:int = dy >> 1
+            err = dy >> 1
+            y1 += 1
             while y != y1:
-                if 0 <= x < 72 and 0 <= y < 40:
-                    if colour & 1:
-                        buffer1[o] |= m
+                if 0 <= x < _WIDTH and 0 <= y < _HEIGHT:
+                    if c1:
+                        buffer[o] |= m
                     else:
-                        buffer1[o] &= im
-                    if colour & 2:
-                        buffer2[o] |= m
+                        buffer[o] &= im
+                    if c2:
+                        shading[o] |= m
                     else:
-                        buffer2[o] &= im
+                        shading[o] &= im
                 err -= dx
                 if err < 0:
                     x += sx
@@ -823,25 +885,16 @@ class Grayscale:
                 y += 1
                 m <<= 1
                 if m & 0x100:
-                    o += 72
+                    o += _WIDTH
                     m = 1
                     im = 0xfe
                 else:
                     im = 255-m
-        if 0 <= x < 72 and 0 <= y < 40:
-            if colour & 1:
-                buffer1[o] |= m
-            else:
-                buffer1[o] &= im
-            if colour & 2:
-                buffer2[o] |= m
-            else:
-                buffer2[o] &= im
 
 
 
     def setFont(self, fontFile, width, height, space):
-        sz = os.stat(fontFile)[6]
+        sz = stat(fontFile)[6]
         self.font_bmap = bytearray(sz)
         with open(fontFile, 'rb') as fh:
             fh.readinto(self.font_bmap)
@@ -852,42 +905,42 @@ class Grayscale:
 
 
     @micropython.viper
-    def drawText(self, txt, x:int, y:int, colour:int):
-        buffer1:ptr8 = ptr8(self.buffer1)
-        buffer2:ptr8 = ptr8(self.buffer2)
-        font_bmap:ptr8 = ptr8(self.font_bmap)
-        font_width:int = int(self.font_width)
-        font_space:int = int(self.font_space)
-        font_glyphcnt:int = int(self.font_glyphcnt)
-        sm1o:int = 0xff if colour & 1 else 0
-        sm1a:int = 255 - sm1o
-        sm2o:int = 0xff if colour & 2 else 0
-        sm2a:int = 255 - sm2o
-        ou:int = (y >> 3) * 72 + x
-        ol:int = ou + 72
-        shu:int = y & 7
-        shl:int = 8 - shu
-        for c in txt:
+    def drawText(self, stringToPrint, x:int, y:int, colour:int):
+        buffer = ptr8(self.buffer)
+        shading = ptr8(self.shading)
+        font_bmap = ptr8(self.font_bmap)
+        font_width = int(self.font_width)
+        font_space = int(self.font_space)
+        font_glyphcnt = int(self.font_glyphcnt)
+        sm1o = 0xff if colour & 1 else 0
+        sm1a = 255 - sm1o
+        sm2o = 0xff if colour & 2 else 0
+        sm2a = 255 - sm2o
+        ou = (y >> 3) * _WIDTH + x
+        ol = ou + _WIDTH
+        shu = y & 7
+        shl = 8 - shu
+        for c in memoryview(stringToPrint):
             if isinstance(c, str):
-                co:int = int(ord(c)) - 0x20
+                co = int(ord(c)) - 0x20
             else:
-                co:int = int(c) - 0x20
+                co = int(c) - 0x20
             if co < font_glyphcnt:
-                gi:int = co * font_width
-                gx:int = 0
+                gi = co * font_width
+                gx = 0
                 while gx < font_width:
-                    if 0 <= x < 72:
-                        gb:int = font_bmap[gi + gx]
-                        gbu:int = gb << shu
-                        gbl:int = gb >> shl
-                        if 0 <= ou < 360:
+                    if 0 <= x < _WIDTH:
+                        gb = font_bmap[gi + gx]
+                        gbu = gb << shu
+                        gbl = gb >> shl
+                        if 0 <= ou < _BUFF_SIZE:
                             # paint upper byte
-                            buffer1[ou] = (buffer1[ou] | (gbu & sm1o)) & 255-(gbu & sm1a)
-                            buffer2[ou] = (buffer2[ou] | (gbu & sm2o)) & 255-(gbu & sm2a)
-                        if (shl != 8) and (0 <= ol < 360):
+                            buffer[ou] = (buffer[ou] | (gbu & sm1o)) & 255-(gbu & sm1a)
+                            shading[ou] = (shading[ou] | (gbu & sm2o)) & 255-(gbu & sm2a)
+                        if (shl != 8) and (0 <= ol < _BUFF_SIZE):
                             # paint lower byte
-                            buffer1[ol] = (buffer1[ol] | (gbl & sm1o)) & 255-(gbl & sm1a)
-                            buffer2[ol] = (buffer2[ol] | (gbl & sm2o)) & 255-(gbl & sm2a)
+                            buffer[ol] = (buffer[ol] | (gbl & sm1o)) & 255-(gbl & sm1a)
+                            shading[ol] = (shading[ol] | (gbl & sm2o)) & 255-(gbl & sm2a)
                     ou += 1
                     ol += 1
                     x += 1
@@ -898,19 +951,28 @@ class Grayscale:
 
 
     @micropython.viper
-    def blit(self, src1:ptr8, src2:ptr8, x:int, y:int, width:int, height:int, key:int, mirrorX:int, mirrorY:int):
-        if x+width < 0 or x >= 72:
+    def blit(self, src, x:int, y:int, width:int, height:int, key:int, mirrorX:int, mirrorY:int):
+        if x+width < 0 or x >= _WIDTH:
             return
-        if y+height < 0 or y >= 40:
+        if y+height < 0 or y >= _HEIGHT:
             return
-        buffer1:ptr8 = ptr8(self.buffer1)
-        buffer2:ptr8 = ptr8(self.buffer2)
+        buffer = ptr8(self.buffer)
+        shading = ptr8(self.shading)
 
-        stride:int = width
+        if isinstance(src, (tuple, list)):
+            shd = 1
+            src1 = ptr8(src[0])
+            src2 = ptr8(src[1])
+        else:
+            shd = 0
+            src1 = ptr8(src)
+            src2 = ptr8(0)
 
-        srcx:int = 0 ; srcy:int = 0
-        dstx:int = x ; dsty:int = y
-        sdx:int = 1
+        stride = width
+
+        srcx = 0 ; srcy = 0
+        dstx = x ; dsty = y
+        sdx = 1
         if mirrorX:
             sdx = -1
             srcx += width - 1
@@ -923,8 +985,8 @@ class Grayscale:
                 srcx = 0 - dstx
                 width += dstx
                 dstx = 0
-        if dstx+width > 72:
-            width = 72 - dstx
+        if dstx+width > _WIDTH:
+            width = _WIDTH - dstx
         if mirrorY:
             srcy = height - 1
             if dsty < 0:
@@ -936,41 +998,41 @@ class Grayscale:
                 srcy = 0 - dsty
                 height += dsty
                 dsty = 0
-        if dsty+height > 40:
-            height = 40 - dsty
+        if dsty+height > _HEIGHT:
+            height = _HEIGHT - dsty
 
-        srco:int = (srcy >> 3) * stride + srcx
-        srcm:int = 1 << (srcy & 7)
+        srco = (srcy >> 3) * stride + srcx
+        srcm = 1 << (srcy & 7)
 
-        dsto:int = (dsty >> 3) * 72 + dstx
-        dstm:int = 1 << (dsty & 7)
-        dstim:int = 255 - dstm
+        dsto = (dsty >> 3) * _WIDTH + dstx
+        dstm = 1 << (dsty & 7)
+        dstim = 255 - dstm
 
         while height != 0:
-            srcco:int = srco
-            dstco:int = dsto
-            i:int = width
+            srcco = srco
+            dstco = dsto
+            i = width
             while i != 0:
-                v:int = 0
+                v = 0
                 if src1[srcco] & srcm:
                     v = 1
-                if src2[srcco] & srcm:
+                if shd and (src2[srcco] & srcm):
                     v |= 2
                 if (key == -1) or (v != key):
                     if v & 1:
-                        buffer1[dstco] |= dstm
+                        buffer[dstco] |= dstm
                     else:
-                        buffer1[dstco] &= dstim
+                        buffer[dstco] &= dstim
                     if v & 2:
-                        buffer2[dstco] |= dstm
+                        shading[dstco] |= dstm
                     else:
-                        buffer2[dstco] &= dstim
+                        shading[dstco] &= dstim
                 srcco += sdx
                 dstco += 1
                 i -= 1
             dstm <<= 1
             if dstm & 0x100:
-                dsto += 72
+                dsto += _WIDTH
                 dstm = 1
                 dstim = 0xfe
             else:
@@ -989,22 +1051,36 @@ class Grayscale:
 
     @micropython.native
     def drawSprite(self, s):
-        self.blit(s.bitmap1, s.bitmap2, s.x, s.y, s.width, s.height, s.key, s.mirrorX, s.mirrorY)
+        self.blit(s.bitmap, s.x, s.y, s.width, s.height, s.key, s.mirrorX, s.mirrorY)
 
     @micropython.viper
-    def blitWithMask(self, src1:ptr8, src2:ptr8, x:int, y:int, width:int, height:int, key:int, mirrorX:int, mirrorY:int, mask:ptr8):
-        if x+width < 0 or x >= 72:
+    def blitWithMask(self, src, x:int, y:int, width:int, height:int, key:int, mirrorX:int, mirrorY:int, mask):
+        if x+width < 0 or x >= _WIDTH:
             return
-        if y+height < 0 or y >= 40:
+        if y+height < 0 or y >= _HEIGHT:
             return
-        buffer1:ptr8 = ptr8(self.buffer1)
-        buffer2:ptr8 = ptr8(self.buffer2)
+        buffer = ptr8(self.buffer)
+        shading = ptr8(self.shading)
 
-        stride:int = width
+        if isinstance(src, (tuple, list)):
+            shd = 1
+            src1 = ptr8(src[0])
+            src2 = ptr8(src[1])
+        else:
+            shd = 0
+            src1 = ptr8(src)
+            src2 = ptr8(0)
 
-        srcx:int = 0 ; srcy:int = 0
-        dstx:int = x ; dsty:int = y
-        sdx:int = 1
+        if isinstance(mask, (tuple, list)):
+            maskp = ptr8(mask[0])
+        else:
+            maskp = ptr8(mask)
+
+        stride = width
+
+        srcx = 0 ; srcy = 0
+        dstx = x ; dsty = y
+        sdx = 1
         if mirrorX:
             sdx = -1
             srcx += width - 1
@@ -1017,8 +1093,8 @@ class Grayscale:
                 srcx = 0 - dstx
                 width += dstx
                 dstx = 0
-        if dstx+width > 72:
-            width = 72 - dstx
+        if dstx+width > _WIDTH:
+            width = _WIDTH - dstx
         if mirrorY:
             srcy = height - 1
             if dsty < 0:
@@ -1030,36 +1106,36 @@ class Grayscale:
                 srcy = 0 - dsty
                 height += dsty
                 dsty = 0
-        if dsty+height > 40:
-            height = 40 - dsty
+        if dsty+height > _HEIGHT:
+            height = _HEIGHT - dsty
 
-        srco:int = (srcy >> 3) * stride + srcx
-        srcm:int = 1 << (srcy & 7)
+        srco = (srcy >> 3) * stride + srcx
+        srcm = 1 << (srcy & 7)
 
-        dsto:int = (dsty >> 3) * 72 + dstx
-        dstm:int = 1 << (dsty & 7)
-        dstim:int = 255 - dstm
+        dsto = (dsty >> 3) * _WIDTH + dstx
+        dstm = 1 << (dsty & 7)
+        dstim = 255 - dstm
 
         while height != 0:
-            srcco:int = srco
-            dstco:int = dsto
-            i:int = width
+            srcco = srco
+            dstco = dsto
+            i = width
             while i != 0:
-                if (mask[srcco] & srcm) == 0:
+                if (maskp[srcco] & srcm) == 0:
                     if src1[srcco] & srcm:
-                        buffer1[dstco] |= dstm
+                        buffer[dstco] |= dstm
                     else:
-                        buffer1[dstco] &= dstim
-                    if src2[srcco] & srcm:
-                        buffer2[dstco] |= dstm
+                        buffer[dstco] &= dstim
+                    if shd and (src2[srcco] & srcm):
+                        shading[dstco] |= dstm
                     else:
-                        buffer2[dstco] &= dstim
+                        shading[dstco] &= dstim
                 srcco += sdx
                 dstco += 1
                 i -= 1
             dstm <<= 1
             if dstm & 0x100:
-                dsto += 72
+                dsto += _WIDTH
                 dstm = 1
                 dstim = 0xfe
             else:
@@ -1078,4 +1154,7 @@ class Grayscale:
 
     @micropython.native
     def drawSpriteWithMask(self, s, m):
-        self.blit(s.bitmap1, s.bitmap2, s.x, s.y, s.width, s.height, s.key, s.mirrorX, s.mirrorY, m.bitmap1)
+        self.blit(s.bitmap, s.x, s.y, s.width, s.height, s.key, s.mirrorX, s.mirrorY, m.bitmap)
+
+display = Grayscale()
+display.enableGrayscale()
