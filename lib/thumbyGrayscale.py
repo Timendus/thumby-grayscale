@@ -15,13 +15,11 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 
-import micropython
 from utime import sleep_ms, ticks_diff, ticks_ms, sleep_us
-from machine import Pin, SPI, freq, idle, mem32
+from machine import Pin, SPI, idle, mem32
 import _thread
 from os import stat
 from math import sqrt, floor
-import gc
 from array import array
 from thumbyButton import buttonA, buttonB, buttonU, buttonD, buttonL, buttonR
 from sys import modules
