@@ -1154,7 +1154,7 @@ class Grayscale:
 
     @micropython.native
     def drawSpriteWithMask(self, s, m):
-        self.blit(s.bitmap, s.x, s.y, s.width, s.height, s.key, s.mirrorX, s.mirrorY, m.bitmap)
+        self.blitWithMask(s.bitmap, s.x, s.y, s.width, s.height, s.key, s.mirrorX, s.mirrorY, m.bitmap)
 
 display = Grayscale()
 display.enableGrayscale()
