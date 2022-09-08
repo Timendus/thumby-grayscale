@@ -960,18 +960,18 @@ class Grayscale:
         buffer = ptr8(self.buffer)
         shading = ptr8(self.shading)
 
-        if isinstance(src, (tuple, list)):
+        srctyp = type(src)
+        if srctyp == tuple or srctyp == list:
             shd = 1
             src1 = ptr8(src[0])
             src2 = ptr8(src[1])
         else:
             shd = 0
             src1 = ptr8(src)
-            src2 = ptr8(0)
 
         stride = width
 
-        srcx = 0 ; srcy = 0
+        srcx = srcy = 0
         dstx = x ; dsty = y
         sdx = 1
         if mirrorX:
@@ -1014,9 +1014,10 @@ class Grayscale:
             dstco = dsto
             i = width
             while i != 0:
-                v = 0
                 if src1[srcco] & srcm:
                     v = 1
+                else:
+                    v = 0
                 if shd and (src2[srcco] & srcm):
                     v |= 2
                 if (key == -1) or (v != key):
@@ -1063,14 +1064,14 @@ class Grayscale:
         buffer = ptr8(self.buffer)
         shading = ptr8(self.shading)
 
-        if isinstance(src, (tuple, list)):
+        srctyp = type(src)
+        if srctyp == tuple or srctyp == list:
             shd = 1
             src1 = ptr8(src[0])
             src2 = ptr8(src[1])
         else:
             shd = 0
             src1 = ptr8(src)
-            src2 = ptr8(0)
 
         if isinstance(mask, (tuple, list)):
             maskp = ptr8(mask[0])
@@ -1079,7 +1080,7 @@ class Grayscale:
 
         stride = width
 
-        srcx = 0 ; srcy = 0
+        srcx = srcy = 0
         dstx = x ; dsty = y
         sdx = 1
         if mirrorX:

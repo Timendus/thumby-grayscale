@@ -6,30 +6,28 @@ freq(125000000)
 
 # Results (example full run):
 '''
-core0 GPUv2.1
-Draw Angled Line Test: 437038
-Draw Straight Line Test: 516436
-Hello World Chart Test: 1535651
-Rectangle Chart Test: 1140663
-Filled Rectangle Chart Test: 877755
-Hello World Test: 655376
-Cat Sprite Test (nofill): 1728751
-White Fill Test: 1100809
-Light Gray Fill Test: 1101050
+core0 GPUv3.0
+Draw Angled Line Test: 438878
+Draw Straight Line Test: 521488
+Hello World Chart Test: 1540864
+Rectangle Chart Test: 1141593
+Filled Rectangle Chart Test: 885872
+Hello World Test: 660205
+Cat Sprite Test (nofill): 1974079
+White Fill Test: 1089783
+Light Gray Fill Test: 1089105
 
-core0 GPUv2.0
-Draw Angled Line Test: 446417
-Draw Straight Line Test: 340048
-Hello World Chart Test: 2297569
-Rectangle Chart Test: 1148243
-Filled Rectangle Chart Test: 906723
-Hello World Test: 1381463
-Cat Sprite Test (nofill): 1657810
-White Fill Test: 1103247
-Light Gray Fill Test: 1103208
+Standard API
+Draw Angled Line Test: 264097
+Draw Straight Line Test: 398096
+Hello World Chart Test: 4844432
+Rectangle Chart Test: 1354058
+Filled Rectangle Chart Test: 4244508
+Hello World Test: 604901
+Cat Sprite Test (nofill): 1665697
+White Fill Test: 1445999
+Light Gray Fill Test: 1445975
 '''
-
-# TODO Draw line test
 
 for i in range(2):
     if i==0:
@@ -48,24 +46,23 @@ for i in range(2):
             ])),
             30, 15         # Position
         )
-        print("\ncore0 GPUv2.1")
+        print("\ncore0 GPUv3.0")
     else:
         gs.disableGrayscale()
-        import grayscale as grayscale
-        gs = grayscale.Grayscale()
-        cat = grayscale.Sprite(
+        import thumbyGraphics as grayscale
+        gs = grayscale.display
+        gs.BLACK = gs.LIGHTGRAY = 0
+        gs.WHITE = gs.DARKGRAY = 1
+        from thumbySprite import Sprite
+        cat = Sprite(
             12, 9,         # Dimensions
             bytearray([    # Layer 2 data
                 255,255,87,7,3,3,3,67,3,7,7,255,
                 1,1,1,0,0,0,0,0,0,0,1,1
             ]),
-            bytearray([    # Layer 1 data
-                175,7,169,254,237,255,191,157,190,233,255,175,
-                1,1,0,1,1,1,1,1,1,1,1,1
-            ]),
             30, 15         # Position
         )
-        print("\ncore0 GPUv2.0")
+        print("\nStandard API")
 
     # Draw Angled Line Test
     t = ticks_us()
