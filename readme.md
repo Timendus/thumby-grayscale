@@ -197,8 +197,7 @@ actual display.
 
 Prior to loading in the frame we park the row counter at row 0 and wait for the
 nominal time for 8 rows to be output. This (hopefully) provides enough time for
-the row counter to reach row 0 before it sticks there. (Note: recent test
-indicate that perhaps the current row actually jumps before parking)
+the row counter to reach row 0 before it sticks there.
 
 ![An approximation of what the thread is doing and what we think is happening
 inside the controller](./explainer-animation/explainer-animation.gif)<br/> _An
