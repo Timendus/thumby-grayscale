@@ -33,6 +33,9 @@ import os
 
 machine.freq(125000000)
 
+from thumbyGrayscale import display
+thumby.display = display
+
 gc.enable() # This line helps make sure we don't run out of memory
 
 from framebuf import FrameBuffer, MONO_VLSB # Graphics stuff
@@ -59,6 +62,7 @@ PlayerRunFrame2 = bytearray([0xFF, 0xFF, 0xF7, 0xFB, 0xFB, 0xFB, 0x3B, 0x93, 0xE
 CactusSpr1 = bytearray([0x00 ^ 0xFF, 0xFC ^ 0xFF, 0x86 ^ 0xFF, 0x92 ^ 0xFF, 0xC2 ^ 0xFF, 0xFC ^ 0xFF, 0x00 ^ 0xFF, 0x00 ^ 0xFF])
 CactusSpr2 = bytearray([0x00 ^ 0xFF, 0x1E ^ 0xFF, 0x10 ^ 0xFF, 0xFE ^ 0xFF, 0xE4 ^ 0xFF, 0x20 ^ 0xFF, 0x78 ^ 0xFF, 0x00 ^ 0xFF])
 CloudSpr = bytearray([0x9F, 0x4F, 0x63, 0x59, 0xBD, 0x73, 0x73, 0x65, 0x5C, 0x7E, 0x7E, 0x51, 0x57, 0x4F, 0x1F, 0xBF])
+CloudSpr2 = bytearray([96,240,252,254,126,254,254,254,255,255,255,254,248,240,224,64])
 
 CactusSpr = CactusSpr1
 
@@ -167,6 +171,7 @@ while(GameRunning):
 
             elif(thumby.buttonA.pressed() == True):
                 # Quit
+                thumby.display.disableGrayscale()
                 machine.reset()
 
     # Is the cactus out of view?
@@ -192,7 +197,7 @@ while(GameRunning):
     # Draw game state
     thumby.display.fill(1)
     thumby.display.blit(CactusSpr, int(16 + CactusPos), 24, 8, 8, 1, 0, 0)
-    thumby.display.blit(CloudSpr, int(16 + CloudPos), 8, 16, 8, 1, 0, 0)
+    thumby.display.blit((CloudSpr, CloudSpr2), int(16 + CloudPos), 8, 16, 8, 1, 0, 0)
 
     if(t0 % 250000 < 125000 or YPos != 0.0):
         # Player is in first frame of run animation
@@ -201,7 +206,7 @@ while(GameRunning):
         # Player is in second frame of run animation
         thumby.display.blit(PlayerRunFrame2, 8, int(24 + YPos), 16, 8, 1, 0, 0)
 
-    thumby.display.drawFilledRectangle(0, 31, thumby.display.width, 9, 0) # Ground
+    thumby.display.drawFilledRectangle(0, 31, thumby.display.width, 9, display.LIGHTGRAY) # Ground
     thumby.display.drawText(str(int(Points)), 0, 0, 0) # Current points
     thumby.display.drawText("pts", len(str(int(Points))) * 8, 0, 0)
     thumby.display.drawText(str(int(Distance)), 0, 32, 1) # Current distance
