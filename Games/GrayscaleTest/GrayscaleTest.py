@@ -29,10 +29,6 @@ from time import sleep_ms
 from utime import ticks_us, sleep_us, ticks_diff
 from thumbyGrayscale import display, Sprite
 
-# Initialization
-
-gs = display
-
 # Helper function
 
 def waitKey():
@@ -55,20 +51,20 @@ for s in range(4):
     for y in range(5):
         sy = y * 72
         for x in range(18):
-            gs.buffer[sy + sx + x] = m1
-            gs.shading[sy + sx + x] = m2
-gs.show()
+            display.buffer[sy + sx + x] = m1
+            display.shading[sy + sx + x] = m2
+display.show()
 waitKey()
 
 # Drawing primitives
 
-gs.drawFilledRectangle(0, 0, 72, 40, gs.WHITE)
-gs.drawFilledRectangle(0, 0, 62, 30, gs.LIGHTGRAY)
-gs.drawFilledRectangle(0, 0, 52, 20, gs.DARKGRAY)
-gs.drawFilledRectangle(0, 0, 42, 10, gs.BLACK)
-gs.drawText("Hello", 2, 31, gs.LIGHTGRAY)
-gs.drawText("world!", 37, 31, gs.DARKGRAY)
-gs.update()
+display.drawFilledRectangle(0, 0, 72, 40, display.WHITE)
+display.drawFilledRectangle(0, 0, 62, 30, display.LIGHTGRAY)
+display.drawFilledRectangle(0, 0, 52, 20, display.DARKGRAY)
+display.drawFilledRectangle(0, 0, 42, 10, display.BLACK)
+display.drawText("Hello", 2, 31, display.LIGHTGRAY)
+display.drawText("world!", 37, 31, display.DARKGRAY)
+display.update()
 waitKey()
 
 # Sprites as full screen images
@@ -102,41 +98,73 @@ parrotSprite = Sprite(72, 40, (bytearray([
     255,253,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,
 ])))
 
-gs.drawSprite(girlSprite)
-gs.update()
+display.drawSprite(girlSprite)
+display.update()
 waitKey()
 
-gs.drawSprite(parrotSprite)
-gs.update()
+display.drawSprite(parrotSprite)
+display.update()
 waitKey()
 
 # Cat animation using a sprite
 
+background = Sprite(
+    16, 16,            # Dimensions
+    (
+        bytearray([    # Layer 1 data
+            255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,
+            255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255
+        ]),
+        bytearray([    # Layer 2 data
+            2,32,0,16,97,128,112,8,0,18,0,0,32,0,8,0,
+            0,0,17,0,8,0,64,0,2,12,16,76,2,0,16,0
+        ])
+    ),
+    0, 0               # Position
+)
+
 cat = Sprite(
-    12, 9,         # Dimensions
-    (bytearray([    # Layer 2 data
-        175,7,169,254,237,255,191,157,190,233,
-        255,175,1,1,0,1,1,1,1,1,1,1,1,1,
+    12, 9,             # Dimensions
+    (
+        bytearray([    # Layer 1 data
+            175,7,169,254,237,255,191,157,190,233,
+            255,175,1,1,0,1,1,1,1,1,1,1,1,1,
+        ]),
+        bytearray([    # Layer 2 data
+            80,248,254,249,238,252,188,222,189,238,
+            248,80,0,0,1,1,1,1,1,1,1,1,0,0,
+        ])
+    ),
+    30, 15             # Position
+)
+
+catMask = Sprite(
+    12, 9,             # Dimensions
+    bytearray([        # Mask bitmap data
+        175,7,1,0,1,3,3,1,0,1,7,175,1,1,0,0,0,0,0,0,0,0,1,1
     ]),
-    bytearray([    # Layer 1 data
-        80,248,254,249,238,252,188,222,189,238,
-        248,80,0,0,1,1,1,1,1,1,1,1,0,0,
-    ])),
-    30, 15         # Position
+    30, 15             # Position
 )
 
 dx = dy = 1
 while True:
-    gs.fill(gs.WHITE)
-    gs.drawSprite(cat)
+    display.fill(display.WHITE)
+    for x in range(0, 72, 16):
+        for y in range(0, 40, 16):
+            background.x = x
+            background.y = y
+            display.drawSprite(background)
+    display.drawSpriteWithMask(cat, catMask)
     cat.x += dx
     cat.y += dy
+    catMask.x += dx
+    catMask.y += dy
     cat.mirrorX = dx < 0
     if cat.x == 0 or cat.x == 60:
         dx = -dx
     if cat.y == 0 or cat.y == 31:
         dy = -dy
-    gs.update()
+    display.update()
     sleep_ms(50)
 
     if actionPressed():
@@ -155,18 +183,18 @@ frame_rate = 30
 frame_microsec = int(1000000.0 / frame_rate)
 while not actionPressed():
     t0 = ticks_us()
-    gs.fill(gs.WHITE)
-    gs.drawFilledRectangle(x, y+0, 12, 4, gs.LIGHTGRAY)
-    gs.drawFilledRectangle(x, y+4, 12, 4, gs.DARKGRAY)
-    gs.drawFilledRectangle(x, y+8, 12, 4, gs.BLACK)
+    display.fill(display.WHITE)
+    display.drawFilledRectangle(x, y+0, 12, 4, display.LIGHTGRAY)
+    display.drawFilledRectangle(x, y+4, 12, 4, display.DARKGRAY)
+    display.drawFilledRectangle(x, y+8, 12, 4, display.BLACK)
 
-    gs.setPixel(0, 0, gs.BLACK)
-    gs.setPixel(71, 0, gs.BLACK)
-    gs.setPixel(0, 39, gs.BLACK)
-    gs.setPixel(71, 39, gs.BLACK)
-    gs.drawText(str(fps >> 4), 2, 2, gs.LIGHTGRAY)
+    display.setPixel(0, 0, display.BLACK)
+    display.setPixel(71, 0, display.BLACK)
+    display.setPixel(0, 39, display.BLACK)
+    display.setPixel(71, 39, display.BLACK)
+    display.drawText(str(fps >> 4), 2, 2, display.LIGHTGRAY)
 
-    gs.show()
+    display.show()
 
     x += dx
     if x < 0 or x > 72-12:
@@ -189,5 +217,5 @@ while not actionPressed():
 
 # End of demo!
 
-gs.disableGrayscale()
+display.disableGrayscale()
 reset()
