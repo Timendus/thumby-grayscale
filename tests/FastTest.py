@@ -42,8 +42,7 @@ def legacy_sprite(spr):
     # 1 0 -> 0 1 # Dark gray
     # 0 1 -> 1 1 # Light gray
     # 1 1 -> 1 0 # White
-    b1 = spr.bitmap
-    b2 = spr.bitmapSHD
+    b1, b2 = spr.layers
     for i in range(0, len(b1)):
         a1 = b1[i]
         a2 = b2[i]
