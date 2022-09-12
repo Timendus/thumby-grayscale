@@ -649,14 +649,14 @@ class Grayscale:
                             i += 1
                         state[_ST_COPY_BUFFS] = 0
                     # check if there's a pending contrast/brightness value change
-                    elif state[_ST_CONTRAST]:
+                    if state[_ST_CONTRAST] != 0:
                         # Copy in the new contrast adjustments
                         ptr8(postFrameAdj[0])[1] = postFrameAdjSrc[0]
                         ptr8(postFrameAdj[1])[1] = postFrameAdjSrc[1]
                         ptr8(postFrameAdj[2])[1] = postFrameAdjSrc[2]
                         state[_ST_CONTRAST] = 0
                     # check if there are pending commands
-                    elif state[_ST_PENDING_CMD]:
+                    elif state[_ST_PENDING_CMD] != 0:
                         #spi_write(pending_cmds)
                         i = 0
                         while i < 8:
