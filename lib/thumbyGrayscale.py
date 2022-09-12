@@ -317,7 +317,7 @@ class Grayscale:
                 # 0xd3,0        Set display offset to 0
                 self._spi.write(bytearray([0xa8,_HEIGHT-1,0xd3,0]))
                 if self._state[_ST_INVERT]:
-                    self._spi.write(bytearray[0xa6 | 1])    # Resume device color inversion
+                    self._spi.write(bytearray([0xa6 | 1]))    # Resume device color inversion
             else:
                 # Initialise the display for grayscale timings
                 # 0xae          Display Off
