@@ -121,7 +121,7 @@ class Sprite:
 # 530kHz is taken to be the highest nominal clock frequency. The
 # calculations shown provide the value in seconds, which can be
 # multiplied by 1e6 to provide a microsecond value.
-_PRE_FRAME_TIME_US    = const( 785)     # 8 rows: ( 8*(1+1+50)) / 530e3 seconds
+_PRE_FRAME_TIME_US    = const( 883)     # 9 rows: ( 9*(1+1+50)) / 530e3 seconds
 _FRAME_TIME_US        = const(4709)     # 48 rows: (49*(1+1+50)) / 530e3 seconds
 
 # Thread state variables for managing the Grayscale Thread
