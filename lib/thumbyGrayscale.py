@@ -121,7 +121,7 @@ class Sprite:
 # 530kHz is taken to be the highest nominal clock frequency. The
 # calculations shown provide the value in seconds, which can be
 # multiplied by 1e6 to provide a microsecond value.
-_PRE_FRAME_TIME_US    = const( 785)     # 8 rows: ( 8*(1+1+50)) / 530e3 seconds
+_PRE_FRAME_TIME_US    = const( 883)     # 9 rows: ( 9*(1+1+50)) / 530e3 seconds
 _FRAME_TIME_US        = const(4709)     # 48 rows: (49*(1+1+50)) / 530e3 seconds
 
 # Thread state variables for managing the Grayscale Thread
@@ -317,7 +317,7 @@ class Grayscale:
                 # 0xd3,0        Set display offset to 0
                 self._spi.write(bytearray([0xa8,_HEIGHT-1,0xd3,0]))
                 if self._state[_ST_INVERT]:
-                    self._spi.write(bytearray[0xa6 | 1])    # Resume device color inversion
+                    self._spi.write(bytearray([0xa6 | 1]))    # Resume device color inversion
             else:
                 # Initialise the display for grayscale timings
                 # 0xae          Display Off
@@ -649,14 +649,14 @@ class Grayscale:
                             i += 1
                         state[_ST_COPY_BUFFS] = 0
                     # check if there's a pending contrast/brightness value change
-                    elif state[_ST_CONTRAST]:
+                    if state[_ST_CONTRAST] != 0:
                         # Copy in the new contrast adjustments
                         ptr8(postFrameAdj[0])[1] = postFrameAdjSrc[0]
                         ptr8(postFrameAdj[1])[1] = postFrameAdjSrc[1]
                         ptr8(postFrameAdj[2])[1] = postFrameAdjSrc[2]
                         state[_ST_CONTRAST] = 0
                     # check if there are pending commands
-                    elif state[_ST_PENDING_CMD]:
+                    elif state[_ST_PENDING_CMD] != 0:
                         #spi_write(pending_cmds)
                         i = 0
                         while i < 8:
