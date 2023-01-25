@@ -220,6 +220,14 @@ class Grayscale:
         # Initialise the device to be capable of grayscale
         self.init_display()
 
+        # Load the grayscale timings settings or calibrate
+        try:
+            with open("grayscale.cfg", "r") as fh:
+                _, _, conf = fh.read().partition("timing,")
+            calibrator[0] = int(conf.split(',')[0])
+        except (OSError, ValueError):
+            self.calibrate()
+
     @micropython.viper
     def _initEmuScreen(self):
         if not emulator:
@@ -1119,6 +1127,49 @@ class Grayscale:
     @micropython.native
     def drawSpriteWithMask(self, s, m):
         self.blitWithMask(s.bitmap, s.x, s.y, s.width, s.height, s.key, s.mirrorX, s.mirrorY, m.bitmap)
+
+    def calibrate(self):
+        self.disableGrayscale()
+        self.setFont("/lib/font3x5.bin", 3, 5, 1)
+        rec = self.drawFilledRectangle
+        tex = self.drawText
+        origFPS = self.frameRate
+        self.setFPS(60)
+        tex("PLEASE CALIBRATE", 0, 0, 1)
+        tex("GRAYSCALE ON THE", 0, 6, 1)
+        tex("NEXT SCREEN...", 0, 12, 1)
+        tex("(USE LEFT / RIGHT", 0, 22, 1)
+        tex(" TO FIND A STABLE", 0, 28, 1)
+        tex("            VALUE)", 0, 34, 1)
+        self.update()
+        while not buttonA.justPressed(): idle()
+        self.setFont("/lib/font5x7.bin", 5, 7, 1)
+        self.enableGrayscale()
+        c = h = 0
+        while not buttonA.justPressed():
+            rec(0, 0, 72, 40, 1)
+            rec(2, 0, 68, 30, 3)
+            rec(8, 0, 56, 20, 2)
+            rec(16, 0, 40, 10, 0)
+            tex("V-Sync:", 17, 1, 3)
+            if c%60<30 or buttonL.pressed():
+                tex("<", 16, 12, 1)
+            if c%60>=30 or buttonR.pressed():
+                tex(">", 52, 12, 1)
+            tex(str(calibrator[0]), 28, 12, 1)
+            tex("Grayscale", 10, 22, 2)
+            tex("Calibration", 4, 32, 0)
+            self.update()
+            c += 1
+            if c%10: continue
+            if (buttonL.pressed() and h>2) or buttonL.justPressed():
+                calibrator[0] = 1 if calibrator[0] == 1 else calibrator[0] - 1
+            if (buttonR.pressed() and h>2) or buttonR.justPressed():
+                calibrator[0] = 200 if calibrator[0] == 200 else calibrator[0] + 1
+            h = h + 1 if buttonL.pressed() or buttonR.pressed() else 0
+        self.setFPS(origFPS)
+        with open("grayscale.cfg", "w") as fh:
+            fh.write(f"timing,{str(calibrator[0])}")
 
 display = Grayscale()
 display.enableGrayscale()
