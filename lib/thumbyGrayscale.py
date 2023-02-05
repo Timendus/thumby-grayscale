@@ -22,6 +22,7 @@ from os import stat
 from math import sqrt, floor
 from array import array
 from thumbyButton import buttonA, buttonB, buttonU, buttonD, buttonL, buttonR
+from thumbyHardware import HWID
 from sys import modules
 
 __version__ = '3.0.0'
@@ -211,7 +212,6 @@ class Grayscale:
         self.lastUpdateEnd = 0
         self.frameRate = 0
 
-        self.brightness(self._brightness)
         self._initEmuScreen()
 
         # Copy draw buffer from the standard library if it's been used
@@ -220,13 +220,20 @@ class Grayscale:
         # Initialise the device to be capable of grayscale
         self.init_display()
 
+        self.brightness(self._brightness)
+
         # Load the grayscale timings settings or calibrate
-        try:
-            with open("grayscale.cfg", "r") as fh:
-                _, _, conf = fh.read().partition("timing,")
-            calibrator[0] = int(conf.split(',')[0])
-        except (OSError, ValueError):
-            self.calibrate()
+        if not emulator:
+            if HWID < 2:
+                calibrator[0] = 96
+                with open("thumbyGS.cfg", "w") as fh:
+                    fh.write(f"timing,{str(calibrator[0])}")
+            try:
+                with open("thumbyGS.cfg", "r") as fh:
+                    _, _, conf = fh.read().partition("timing,")
+                calibrator[0] = int(conf.split(',')[0])
+            except (OSError, ValueError):
+                self.calibrate()
 
     @micropython.viper
     def _initEmuScreen(self):
@@ -266,15 +273,14 @@ class Grayscale:
         # 0x20,0x00     Set horizontal addressing mode
         # 0x40          Set display start line to 0
         # 0xa1          Set segment remap mode 1
-        # 0xa8,56       Set multiplex ratio to 57
+        # 0xa8,39       Set multiplex ratio to 39 (will be modified)
         # 0xc8          Set COM output scan direction 1
-        # 0xd3,47       Set display offset to 47 (will be modified for timings)
+        # 0xd3,0        Set display offset to 0 (will be modified)
         # 0xda,0x12     Set COM pins hardware configuration: alternative config,
         #                   disable left/right remap
         # 0xd5,0xf0     Set clk div ratio = 1, and osc freq = ~530kHz (480-590)kHz
         # 0xd9,0x11     Set pre-charge periods: phase 1 = 1 , phase 2 = 1
         # 0xdb,0x20     Set Vcomh deselect level = 0.77 x Vcc
-        # 0x81,0x7f     Set Bank0 brightness to 127 (will be changed later)
         # 0xa4          Do not enable entire display (i.e. use GDRAM)
         # 0xa6          Normal (not inverse) display (invert is simulated)
         # 0x8d,0x14     Charge bump setting: enable charge pump during display on
@@ -282,8 +288,7 @@ class Grayscale:
         # 0xf           Set display on
         self._spi.write(bytearray([
             0xae, 0x20,0x00, 0x40, 0xa1, 0xa8,39, 0xc8, 0xd3,0, 0xda,0x12,
-            0xd5,0xf0, 0xd9,0x11, 0xdb,0x20, 0x81,0x7f,
-            0xa4, 0xa6, 0x8d,0x14, 0xad,0x30, 0xaf]))
+            0xd5,0xf0, 0xd9,0x11, 0xdb,0x20, 0xa4, 0xa6, 0x8d,0x14, 0xad,0x30, 0xaf]))
         self._dc(1)
         # Clear the entire GDRAM
         zero32 = bytearray([0] * 32)
@@ -542,14 +547,6 @@ class Grayscale:
         # row counter, and overflow area.
         spi0[2] = 0xd3; spi0[2] = 47
 
-        # Capture the row counter
-        spi0[2] = 0xa8; spi0[2] = 15
-        time_pre = tmr[10] + 8*calib[0]
-        while (tmr[10] - time_pre) < 0: pass
-        spi0[2] = 0xa8; spi0[2] = 15
-        time_pre = tmr[10] + 8*calib[0]
-        while (tmr[10] - time_pre) < 0: pass
-
         state[_ST_THREAD] = _THREAD_RUNNING
         while state[_ST_THREAD] == _THREAD_RUNNING:
             # This is the main GPU loop. We cycle through each of the 3 display
@@ -558,11 +555,11 @@ class Grayscale:
             while fn < 3:
                 # Calculate timings
                 time_new = tmr[10]
-                time_pre = time_new + 8*calib[0]
+                time_pre = time_new + 700
                 time_end = time_new + 56*calib[0]
 
                 # Park Display (capture row counter offscreen)
-                spi0[2] = 0xa8; spi0[2] = 15
+                spi0[2] = 0xa8; spi0[2] = 1
 
                 # Data Mode
                 while (spi0[3] & 4) == 4: i = spi0[2]
@@ -864,7 +861,6 @@ class Grayscale:
                     im = 255-m
 
 
-
     def setFont(self, fontFile, width, height, space):
         sz = stat(fontFile)[6]
         self.font_bmap = bytearray(sz)
@@ -1129,46 +1125,62 @@ class Grayscale:
         self.blitWithMask(s.bitmap, s.x, s.y, s.width, s.height, s.key, s.mirrorX, s.mirrorY, m.bitmap)
 
     def calibrate(self):
-        self.disableGrayscale()
-        self.setFont("/lib/font3x5.bin", 3, 5, 1)
+        from thumbyButton import inputJustPressed
+        presets = [96, 122]
         rec = self.drawFilledRectangle
         tex = self.drawText
-        origFPS = self.frameRate
-        self.setFPS(60)
-        tex("PLEASE CALIBRATE", 0, 0, 1)
-        tex("GRAYSCALE ON THE", 0, 6, 1)
-        tex("NEXT SCREEN...", 0, 12, 1)
-        tex("(USE LEFT / RIGHT", 0, 22, 1)
-        tex(" TO FIND A STABLE", 0, 28, 1)
-        tex("            VALUE)", 0, 34, 1)
-        self.update()
-        while not buttonA.justPressed(): idle()
-        self.setFont("/lib/font5x7.bin", 5, 7, 1)
-        self.enableGrayscale()
-        c = h = 0
-        while not buttonA.justPressed():
+        def info(*m):
+            self.disableGrayscale()
+            self.fill(0)
+            for i, l in enumerate(m):
+                tex(l, 0, i*8, 1)
+            self.update()
+            while not inputJustPressed(): idle()
+            self.enableGrayscale()
+        s = [0, 0]
+        def sample(title, param, offset):
             rec(0, 0, 72, 40, 1)
             rec(2, 0, 68, 30, 3)
             rec(8, 0, 56, 20, 2)
             rec(16, 0, 40, 10, 0)
-            tex("V-Sync:", 17, 1, 3)
-            if c%60<30 or buttonL.pressed():
-                tex("<", 16, 12, 1)
-            if c%60>=30 or buttonR.pressed():
-                tex(">", 52, 12, 1)
-            tex(str(calibrator[0]), 28, 12, 1)
-            tex("Grayscale", 10, 22, 2)
-            tex("Calibration", 4, 32, 0)
+            tex(title, 17, 1, 3)
+            tex(param, offset, 12, 1)
+            tex("GRAYSCALE", 10, 22, 2)
+            tex("CALIBRATION", 4, 32, 0)
             self.update()
-            c += 1
-            if c%10: continue
-            if (buttonL.pressed() and h>2) or buttonL.justPressed():
-                calibrator[0] = 1 if calibrator[0] == 1 else calibrator[0] - 1
-            if (buttonR.pressed() and h>2) or buttonR.justPressed():
-                calibrator[0] = 200 if calibrator[0] == 200 else calibrator[0] + 1
-            h = h + 1 if buttonL.pressed() or buttonR.pressed() else 0
+            if s[0]%6<3 or buttonL.pressed():
+                tex("<", 16, 12, 1)
+            if s[0]%6>=3 or buttonR.pressed():
+                tex(">", 52, 12, 1)
+            s[0] += 1
+            s[1] = s[1] + 1 if buttonL.pressed() or buttonR.pressed() else 0
+            return (-1 if ((buttonL.pressed() and s[1]>3) or buttonL.justPressed())
+                else 1 if ((buttonR.pressed() and s[1]>3) or buttonR.justPressed())
+                else 0)
+        origFPS = self.frameRate
+        self.setFPS(5)
+        self.setFont("/lib/font5x7.bin", 5, 7, 1)
+
+        info("", "CALIBRATE", "", "GRAYSCALE...")
+        info("Pick clearer", "  image with", "   <-  ->", "then press A", "         ...")
+        p = 0
+        while not buttonA.justPressed():
+            p = (p + sample("Preset:", chr(p+65), 34)) % len(presets)
+            calibrator[0] = presets[p]
+
+        info(" Fine-tune", " image for", "less flicker", "then press A", "         ...")
+        while not buttonA.justPressed():
+            calibrator[0] = min(200, max(1, calibrator[0] +
+                sample(" Tune:", str(calibrator[0]), 28)))
+
         self.setFPS(origFPS)
-        with open("grayscale.cfg", "w") as fh:
+        self.fill(2)
+        for i, l in enumerate([
+            " CALIBRATED!", "", " Press any", "  button to", "     save..."]):
+            tex(l, 0, i*8, 1)
+        self.update()
+        while not inputJustPressed(): idle()
+        with open("thumbyGS.cfg", "w") as fh:
             fh.write(f"timing,{str(calibrator[0])}")
 
 display = Grayscale()
