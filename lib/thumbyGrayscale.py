@@ -693,7 +693,8 @@ class Grayscale:
 
     @micropython.viper
     def drawFilledRectangle(self, x:int, y:int, width:int, height:int, colour:int):
-        if x >= _WIDTH or y >= _HEIGHT: return
+        if x + width <= 0 or x >= _WIDTH or y + height <= 0 or y >= _HEIGHT:
+            return
         if width <= 0 or height <= 0: return
         if x < 0:
             width += x
