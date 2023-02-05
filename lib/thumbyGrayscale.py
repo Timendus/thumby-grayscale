@@ -544,8 +544,10 @@ class Grayscale:
         sio[6] = 1 << 17 # dc(0)
 
         # Set the display offset to allow space for the captured
-        # row counter, and overflow area.
+        # row counter, and overflow area, (and reset row counter).
+        spi0[2] = 0xae
         spi0[2] = 0xd3; spi0[2] = 47
+        spi0[2] = 0xaf
 
         state[_ST_THREAD] = _THREAD_RUNNING
         while state[_ST_THREAD] == _THREAD_RUNNING:
