@@ -1123,7 +1123,7 @@ class Grayscale:
             dstco = dsto
             i = width
             while i != 0:
-                if (maskp[srcco] & srcm) == 0:
+                if maskp[srcco] & srcm:
                     if src1[srcco] & srcm:
                         buffer[dstco] |= dstm
                     else:
