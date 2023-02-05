@@ -1147,11 +1147,11 @@ class Grayscale:
             tex(param, offset, 12, 1)
             tex("GRAYSCALE", 10, 22, 2)
             tex("CALIBRATION", 4, 32, 0)
-            self.update()
             if s[0]%6<3 or buttonL.pressed():
                 tex("<", 16, 12, 1)
             if s[0]%6>=3 or buttonR.pressed():
                 tex(">", 52, 12, 1)
+            self.update()
             s[0] += 1
             s[1] = s[1] + 1 if buttonL.pressed() or buttonR.pressed() else 0
             return (-1 if ((buttonL.pressed() and s[1]>3) or buttonL.justPressed())
