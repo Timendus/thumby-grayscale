@@ -120,7 +120,7 @@ class Sprite:
 # timings to match the different devices.
 # This default number is taken from the clocks per row (1+1+50),
 # and a value of 530kHz for the highest nominal clock frequency.
-calibrator = array('I', [94])
+calibrator = array('I', [98])
 
 # Thread state variables for managing the Grayscale Thread
 _THREAD_STOPPED    = const(0)
@@ -1141,7 +1141,7 @@ class Grayscale:
 
     def calibrate(self):
         from thumbyButton import inputJustPressed
-        presets = [96, 122]
+        presets = [98, 122]
         rec = self.drawFilledRectangle
         tex = self.drawText
         def info(*m):
