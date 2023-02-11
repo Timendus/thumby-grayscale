@@ -469,6 +469,11 @@ class Grayscale:
         else:
             self.show()
 
+    @micropython.viper
+    def show_wait(show):
+        state = ptr32(self._state)
+        while state[_ST_COPY_BUFFS] != 0:
+            idle()
 
     @micropython.native
     def setFPS(self, newFrameRate):
