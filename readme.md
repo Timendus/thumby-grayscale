@@ -9,6 +9,22 @@ picture 📺✨
 ![Showing a grayscale image on the Thumby](./pictures/girl_on_thumby.jpeg)
 <br/>_Showing a photo in four colours on the Thumby_
 
+## Not all Thumbies are created equal
+
+TinyCircuits has changed OLED suppliers some time ago. While the new OLEDs
+should technically conform the the exact same specs as the old ones, in practice
+the trick that we use to produce grayscale doesn't work as well on the new
+displays.
+
+Work is ongoing to improve the grayscale library to support both types of OLEDs,
+but in the mean time your results may not be as good if you buy a Thumby today
+compared to the older production runs.
+
+If you're interested in helping us solve these differences by testing the new
+version of the library, please join [the "4 Shades of Gray"
+thread](https://discord.com/channels/898292107289190461/996871099499425873) on
+the TinyCircuits Discord server.
+
 ## How to use
 
 This library uses a thread running on the second core of the Thumby CPU, so that
