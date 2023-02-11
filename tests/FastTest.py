@@ -42,8 +42,8 @@ def legacy_sprite(spr):
     # 1 0 -> 0 1 # Dark gray
     # 0 1 -> 1 1 # Light gray
     # 1 1 -> 1 0 # White
-    b1 = spr.bitmap
-    b2 = spr.bitmapSHD
+    b1 = spr.bitmap[0]
+    b2 = spr.bitmap[1]
     for i in range(0, len(b1)):
         a1 = b1[i]
         a2 = b2[i]
@@ -117,8 +117,8 @@ cat = legacy_sprite(grayscale.Sprite(
 ))
 catMask = Sprite(
     12, 9,         # Dimensions
-    bytearray([0,7,1,0,1,1,1,1,0,1,7,223,
-           1,1,0,0,0,0,0,0,0,0,1,1]),
+    bytearray([255,248,254,255,254,254,254,254,255,254,248,32,
+                0,0,1,1,1,1,1,1,1,1,0,0]),
     30, 15         # Position
 )
 catBW = Sprite(
