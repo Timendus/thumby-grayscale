@@ -461,7 +461,7 @@ class Grayscale:
             self._dc(1)
             self._spi.write(self.buffer)
 
-    @micropython.native
+    @micropython.viper
     def show_async(self):
         state = ptr32(self._state)
         if state[_ST_THREAD] == _THREAD_RUNNING:
