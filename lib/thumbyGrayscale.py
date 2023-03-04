@@ -263,9 +263,6 @@ class Grayscale:
 
         # Load the grayscale timings settings or calibrate
         if not emulator:
-            if HWID < 2:
-                self._state[_ST_CALIBRATOR] = 87
-                self._state[_ST_MODE] = 0
             try:
                 with open("thumbyGS.cfg", "r") as fh:
                     fhd = fh.read()
@@ -276,7 +273,11 @@ class Grayscale:
                     _, _, conf = fhd.partition("oled,")
                     self._state[_ST_MODE] = int(conf.split(',')[0])
             except (OSError, ValueError):
-                self.calibrate()
+                if HWID < 2:
+                    self._state[_ST_CALIBRATOR] = 87
+                    self._state[_ST_MODE] = 0
+                else:
+                    self.calibrate()
 
     # allow use of 'with'
     def __enter__(self):
