@@ -149,6 +149,8 @@ _ST_CALIBRATOR   = const(4)
 # 3: Bright - OLED2 style subframe layering but with basic timings
 #    for brighter whites on high brightness. May have some artifacts
 #    on hard lines between light and dark gray but less strobing on white.
+# 4: OLED2-dither - Like OLED2 but light gray dithered across both bright
+#    subframes.
 _ST_MODE         = const(5)
 # Timing parameters for each mode
 _params = bytearray([
@@ -157,21 +159,25 @@ _params = bytearray([
     90, 90,  0,
     75, 75, 75,
     75, 75, 75,
+    90, 90,  0,
     # time_end
     56, 56, 56,
     44, 42, 48,
     56, 56, 56,
     56, 56, 56,
+    44, 42, 48,
     # offset
     47, 47, 47,
     60, 62, 56,
     47, 47, 47,
     47, 47, 47,
+    60, 62, 56,
     # mux
     56, 56, 56,
     43, 41, 47,
     56, 56, 56,
-    56, 56, 56])
+    56, 56, 56,
+    43, 41, 47])
 
 # Screen display size constants
 _WIDTH = const(72)
@@ -234,7 +240,7 @@ class Grayscale:
                 # Otherwise, leave it at 127
         except (OSError, ValueError):
             pass
-        self._contrastSrc = bytearray(12)
+        self._contrastSrc = bytearray(15)
         self._contrast = bytearray(3)
 
         # It's better to avoid using regular variables for thread sychronisation.
@@ -490,10 +496,10 @@ class Grayscale:
         contrastSrc = ptr8(self._contrastSrc)
 
         # Prepare contrast for the different subframe layers:
-        #             [---basic---, ----oled2---, ---dither--, ---b-white--]
-        #  Low   (1): [ 1, 20,  50,  1,  22,  22,  1,  1,  10,  1,  22,  22]
-        #  Mid  (28): [13, 47, 178, 13, 120, 120, 20, 20, 138, 13, 120, 120]
-        # High (127): [28, 85, 255, 28, 255, 255, 46, 46, 255, 28, 255, 255]
+        #             [---basic---, ----oled2---, ---dither--, ---b-white--, --d-oled2---]
+        #  Low   (1): [ 1, 20,  50,  1,  22,  22,  1,  1,  10,  1,  22,  22,  1,  22,  22]
+        #  Mid  (28): [13, 47, 178, 13, 120, 120, 20, 20, 138, 13, 120, 120, 13, 120, 120]
+        # High (127): [28, 85, 255, 28, 255, 255, 46, 46, 255, 28, 255, 255, 28, 255, 255]
         cc = int(floor(sqrt(c<<17)))
         # Basic mode
         contrastSrc[0] = (cc*30>>12)-1
@@ -513,6 +519,10 @@ class Grayscale:
         contrastSrc[9] = (cc*30>>12)-1
         contrastSrc[10] = (cc*257>>12)
         contrastSrc[11] = (cc*257>>12)
+        # OLED2 mode - dithered
+        contrastSrc[12] = (cc*30>>12)-1
+        contrastSrc[13] = (cc*257>>12)
+        contrastSrc[14] = (cc*257>>12)
 
         if state[_ST_THREAD] != _THREAD_RUNNING:
             # Apply the brightness directly to the display or emulator
@@ -550,18 +560,23 @@ class Grayscale:
         while i < _BUFF_INT_SIZE:
             v1 = bb[i] ^ inv
             v2 = bs[i]
+            wd = v1 ^ v2
+            w = v1 & wd
+            di = (i%4+i)%2
+            di1 = (d1 if di else d2)
+            di2 =  (d2 if di else d1)
+            b1[i] = wd # white || darkGray [DIM]
             b2[i] = v1 # white || lightGray [MID]
+            b3[i] = w # white [BRIGHT]
             if mode == 0:
                 b1[i] = v1 | v2 # white || lightGray || darkGray [DIM]
             elif mode == 2:
-                # layer1 -> white || lightGray || dither-darkGray [DIM]
-                # layer2 -> white || lightGray || dither-darkGray(alt) [DIM]
-                di = (i%4+i)%2
-                b1[i] = v1 | (v2 & (d1 if di else d2))
-                b2[i] = v1 | (v2 & (d2 if di else d1))
-            else:
-                b1[i] = v1 ^ v2 # white || darkGray [DIM]
-            b3[i] = v1 & (v1 ^ v2) # white [BRIGHT]
+                b1[i] = v1 | (v2 & di1) # white || lightGray || dither-darkGray [DIM]
+                b2[i] = v1 | (v2 & di2) # white || lightGray || dither-darkGray [DIM]
+            elif mode == 4:
+                lg = v1 & v2
+                b2[i] = w | (lg & di1) # white || dither-lightGray [BRIGHT]
+                b3[i] = w | (lg & di2) # white || dither-lightGray [BRIGHT]
             i += 1
 
         # Data Mode
@@ -686,9 +701,9 @@ class Grayscale:
 
                 # Release Display
                 spi0[2] = 0xd3
-                spi0[2] = params[24+mfn]
+                spi0[2] = params[30+mfn]
                 spi0[2] = 0xa8
-                spi0[2] = params[36+mfn]
+                spi0[2] = params[45+mfn]
 
                 # Brightness adjustment for sub-frame layer
                 spi0[2] = 0x81; spi0[2] = contrast[fn]
@@ -721,18 +736,23 @@ class Grayscale:
                     while i < _BUFF_INT_SIZE:
                         v1 = bb[i] ^ inv
                         v2 = bs[i]
+                        wd = v1 ^ v2
+                        w = v1 & wd
+                        di = (i%4+i)%2
+                        di1 = (d1 if di else d2)
+                        di2 =  (d2 if di else d1)
+                        b1[i] = wd # white || darkGray [DIM]
                         b2[i] = v1 # white || lightGray [MID]
+                        b3[i] = w # white [BRIGHT]
                         if mode == 0:
                             b1[i] = v1 | v2 # white || lightGray || darkGray [DIM]
                         elif mode == 2:
-                            # layer1 -> white || lightGray || dither-darkGray [DIM]
-                            # layer2 -> white || lightGray || dither-darkGray(alt) [DIM]
-                            di = (i%4+i)%2
-                            b1[i] = v1 | (v2 & (d1 if di else d2))
-                            b2[i] = v1 | (v2 & (d2 if di else d1))
-                        else:
-                            b1[i] = v2 & (v1 ^ v2) # white || darkGray [DIM]
-                        b3[i] = v1 & (v1 ^ v2) # white [BRIGHT]
+                            b1[i] = v1 | (v2 & di1) # white || lightGray || dither-darkGray [DIM]
+                            b2[i] = v1 | (v2 & di2) # white || lightGray || dither-darkGray [DIM]
+                        elif mode == 4:
+                            lg = v1 & v2
+                            b2[i] = w | (lg & di1) # white || dither-lightGray [BRIGHT]
+                            b3[i] = w | (lg & di2) # white || dither-lightGray [BRIGHT]
                         i += 1
                     state[_ST_COPY_BUFFS] = 0
                     # Copy in contrast adjustments in case they changed
@@ -768,7 +788,7 @@ class Grayscale:
 
                 # Wait until the row counter is between the end of the drawn
                 # area and the end of the multiplex ratio range.
-                while (tmr[10] - time_pre - params[12+mfn]*calib) < 0: pass
+                while (tmr[10] - time_pre - params[15+mfn]*calib) < 0: pass
 
                 fn += 1
 
@@ -1270,7 +1290,7 @@ class Grayscale:
 
     def calibrate(self):
         from thumbyButton import inputJustPressed
-        presets = [(87,0), (107,1), (87,2), (87,3), (111,0),  (111,2)]
+        presets = [(87,0),(107,1),(107,4),(87,2),(87,3),(111,0),(111,2)]
         rec = self.drawFilledRectangle
         tex = self.drawText
         def info(*m):
