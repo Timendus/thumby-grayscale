@@ -275,13 +275,17 @@ class Grayscale:
         if not emulator:
             try:
                 with open("thumbyGS.cfg", "r") as fh:
-                    fhd = fh.read()
-                    if 'gsV3' not in fhd:
+                    vls = fh.read().split('\n')
+                    for fhd in vls:
+                        if fhd.startswith('gsV3,'):
+                            _, _, conf = fhd.partition("timing,")
+                            self._state[_ST_CALIBRATOR] = int(conf.split(',')[0])
+                            _, _, conf = fhd.partition("oled,")
+                            self._state[_ST_MODE] = int(conf.split(',')[0])
+                            break
+                    else:
                         raise ValueError()
-                    _, _, conf = fhd.partition("timing,")
-                    self._state[_ST_CALIBRATOR] = int(conf.split(',')[0])
-                    _, _, conf = fhd.partition("oled,")
-                    self._state[_ST_MODE] = int(conf.split(',')[0])
+
             except (OSError, ValueError):
                 if HWID < 2:
                     self._state[_ST_CALIBRATOR] = 87
@@ -1362,9 +1366,20 @@ class Grayscale:
             tex(l, 0, i*8, 1)
         self.update()
         while not inputJustPressed(): idle()
+        vls = []
+        try:
+            with open("thumbyGS.cfg", "r") as fh:
+                vls = fh.read().split('\n')
+        except OSError: pass
+        nvl = f"gsV3,timing,{str(self._state[_ST_CALIBRATOR])},oled,{str(self._state[_ST_MODE])}"
+        for i, vl in enumerate(vls):
+            if vl.startswith('gsV3,'):
+                vls[i] = nvl
+                break
+        else:
+            vls.append(nvl)
         with open("thumbyGS.cfg", "w") as fh:
-            fh.write(f"gsV3,timing,{str(self._state[_ST_CALIBRATOR])},oled,{
-                str(self._state[_ST_MODE])}")
+            fh.write('\n'.join(vls))
 
 display = Grayscale()
 display.enableGrayscale()
