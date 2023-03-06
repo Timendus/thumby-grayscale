@@ -1297,7 +1297,7 @@ class Grayscale:
         self.blitWithMask(s.bitmap, s.x, s.y, s.width, s.height, s.key, s.mirrorX, s.mirrorY, m.bitmap)
 
     def calibrate(self):
-        from thumbyButton import inputJustPressed
+        from thumbyButton import inputPressed, inputJustPressed
         presets = [(87,0),(107,1),(80,0),(95,0),(100,1),(115,1),
             (107,4),(87,2),(87,3),(87,5),(111,0),(111,2)]
         rec = self.drawFilledRectangle
@@ -1308,7 +1308,12 @@ class Grayscale:
             for i, l in enumerate(m):
                 tex(l, 0, i*8, 1)
             self.update()
+            while inputJustPressed(): pass # Clear latches
+            while inputPressed(): idle()
+            sleep_ms(200) # Debounce avoider
             while not inputJustPressed(): idle()
+            while inputPressed(): idle()
+            sleep_ms(200) # Debounce avoider
             self.enableGrayscale()
         s = [0, 0]
         def sample(title, param, offset):
