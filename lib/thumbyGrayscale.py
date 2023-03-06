@@ -711,13 +711,16 @@ class Grayscale:
                 # Wait long enough to ensure we captured the row counter.
                 while (tmr[10] - time_pre) < 0: pass
 
+                # Brightness adjustment for sub-frame layer
+                spi0[2] = 0x81; spi0[2] = contrast[fn]
+
                 # Release Display
                 spi0[2] = 0xd3
                 spi0[2] = params[36+mfn]
                 spi0[2] = 0xa8
                 spi0[2] = params[54+mfn]
 
-                # Brightness adjustment for sub-frame layer
+                # Brightness adjustment (send twice for stability)
                 spi0[2] = 0x81; spi0[2] = contrast[fn]
 
                 # Data Mode
@@ -730,9 +733,9 @@ class Grayscale:
                 i = 144
                 while i < 360:
                     if i == 216:
-                        while (tmr[10] - time_pre - 8*calib) < 0: pass
+                        while (tmr[10] - (time_pre + 8*calib)) < 0: pass
                     if i == 288:
-                        while (tmr[10] - time_pre - 16*calib) < 0: pass
+                        while (tmr[10] - (time_pre + 16*calib)) < 0: pass
                     while (spi0[3] & 2) == 0: pass
                     spi0[2] = blitsub[i]
                     i += 1
@@ -775,10 +778,10 @@ class Grayscale:
 
                 blitsub = ptr8(subframes[fn+1 if fn < 2 else 0])
                 i = 0
-                while (tmr[10] - time_pre - 24*calib) < 0: pass
+                while (tmr[10] - (time_pre + 24*calib)) < 0: pass
                 while i < 144:
                     if i == 72:
-                        while (tmr[10] - time_pre - 32*calib) < 0: pass
+                        while (tmr[10] - (time_pre + 32*calib)) < 0: pass
                     while (spi0[3] & 2) == 0: pass
                     spi0[2] = blitsub[i]
                     i += 1
@@ -800,7 +803,7 @@ class Grayscale:
 
                 # Wait until the row counter is between the end of the drawn
                 # area and the end of the multiplex ratio range.
-                while (tmr[10] - time_pre - params[18+mfn]*calib) < 0: pass
+                while (tmr[10] - (time_pre + params[18+mfn]*calib)) < 0: pass
 
                 fn += 1
 
