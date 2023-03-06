@@ -380,6 +380,7 @@ class Grayscale:
 
         # Start the grayscale timing thread and wait for it to initialise
         _thread.stack_size(2048)
+        self._init_grayscale()
         _thread.start_new_thread(self._display_thread, ())
         while self._state[_ST_THREAD] != _THREAD_RUNNING:
             idle()
@@ -397,6 +398,7 @@ class Grayscale:
         self._state[_ST_THREAD] = _THREAD_STOPPING
         while self._state[_ST_THREAD] != _THREAD_STOPPED:
             idle()
+        self._deinit_grayscale()
         # Draw B/W view of current frame
         self.show()
         # Resume device color inversion
@@ -610,6 +612,13 @@ class Grayscale:
         while (spi0[3] & 4) == 4: i = spi0[2]
         sio[6] = 1 << 17 # dc(0)
 
+        # Contrast preparation
+        cmode = state[_ST_MODE]*3
+        contrast[0] = contrastSrc[cmode]
+        contrast[1] = contrastSrc[cmode + 1]
+        contrast[2] = contrastSrc[cmode + 2]
+        spi0[2] = 0x81; spi0[2] = contrast[0]
+
         # Set the display offset to allow space for the captured
         # row counter, and overflow area, and then reset display state.
         spi0[2] = 0xae
@@ -619,13 +628,6 @@ class Grayscale:
         spi0[2] = 0xa8; spi0[2] = 1 # Row resets OLED2
         spi0[2] = 0xa6 # disable hardware invert
         spi0[2] = 0xaf # Row resets OLED1
-
-        # Contrast preparation
-        cmode = state[_ST_MODE]*3
-        contrast[0] = contrastSrc[cmode]
-        contrast[1] = contrastSrc[cmode + 1]
-        contrast[2] = contrastSrc[cmode + 2]
-        spi0[2] = 0x81; spi0[2] = contrast[0]
 
     # GPU (Gray Processing Unit) thread function
     @micropython.viper
@@ -690,8 +692,6 @@ class Grayscale:
         #     & 0x10 -> & SPI_SSPSR_BSY_BITS
         spi0 = ptr32(0x4003c000)
         tmr = ptr32(0x40054000)
-
-        self._init_grayscale()
 
         state[_ST_THREAD] = _THREAD_RUNNING
         while state[_ST_THREAD] == _THREAD_RUNNING:
@@ -804,20 +804,17 @@ class Grayscale:
 
                 fn += 1
 
-        self._deinit_grayscale()
+        # Mark that we've stopped
+        state[_ST_THREAD] = _THREAD_STOPPED
 
     @micropython.viper
     def _deinit_grayscale(self):
-        state = ptr32(self._state)
         spi0 = ptr32(0x4003c000)
 
         # Reset monochrome display offset, mux rows, and page address
         spi0[2] = 0xd3; spi0[2] = 0
         spi0[2] = 0xa8; spi0[2] = 39
         spi0[2] = 0x22; spi0[2] = 0; spi0[2] = 4
-
-        # Mark that we've stopped
-        state[_ST_THREAD] = _THREAD_STOPPED
 
 
     @micropython.viper
