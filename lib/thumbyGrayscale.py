@@ -1298,7 +1298,8 @@ class Grayscale:
 
     def calibrate(self):
         from thumbyButton import inputJustPressed
-        presets = [(87,0),(107,1),(107,4),(87,2),(87,3),(87,5),(111,0),(111,2)]
+        presets = [(87,0),(107,1),(80,0),(95,0),(100,1),(115,1),
+            (107,4),(87,2),(87,3),(87,5),(111,0),(111,2)]
         rec = self.drawFilledRectangle
         tex = self.drawText
         def info(*m):
