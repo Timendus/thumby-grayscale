@@ -25,7 +25,7 @@ from thumbyButton import buttonA, buttonB, buttonU, buttonD, buttonL, buttonR
 from thumbyHardware import HWID
 from sys import modules
 
-__version__ = '4.0.1-hemlock'
+__version__ = '4.0.2-hemlock'
 
 
 emulator = None
