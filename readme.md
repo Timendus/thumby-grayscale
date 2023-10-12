@@ -41,10 +41,6 @@ _Grayscale Processing Unit_ 😉
 Before we get started, make sure you are aware of the limitations of this
 library:
 
-* The [code.thumby.us](https://code.thumby.us) Thumby emulator is not
-  multithreaded. That's why this library currently **DOES NOT WORK in the
-  emulator!** Work is under way though to support grayscale in the emulator
-  in the near future!
 * This library requires **MicroPython v1.19.1 or higher**. Trying to initialize
   the library on anything lower will throw an exception.
 * The grayscale image is pretty stable. But it's basically still just flashing
@@ -56,10 +52,20 @@ library:
   developed issues.
 * It will probably **drain the battery** faster because it's doing some pretty
   CPU intensive things.
+* While grayscale is not supported in the Blockly editor on code.thumby.us, you can export Blockly games to MicroPython, and then convert them to grayscale afterwards.
 
 Having said all that, let's get some grayscale going! 😄 See
 [`GrayscaleTest.py`](./Games/GrayscaleTest/GrayscaleTest.py) for a complete
 example, or keep reading for more of a guide.
+
+### Existing Examples
+
+A number of games supporting grayscale have already made it onto the Thumby Arcade! They are great references for how to use grayscale:
+
+* [Fireplace](https://github.com/TinyCircuits/TinyCircuits-Thumby-Games/tree/master/Fireplace)
+* [MineSweep](https://github.com/TinyCircuits/TinyCircuits-Thumby-Games/tree/master/MineSweep)
+* [RocketCup](https://github.com/TinyCircuits/TinyCircuits-Thumby-Games/tree/master/RocketCup)
+* [TinyGolf](https://github.com/TinyCircuits/TinyCircuits-Thumby-Games/tree/master/TinyGolf)
 
 ### Getting it going
 
