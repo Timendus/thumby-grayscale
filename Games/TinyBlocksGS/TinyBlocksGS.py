@@ -113,8 +113,9 @@ def clearScreen():
 def setBlock(xb, yb, val):
   thumby.display.drawFilledRectangle(xb*2, yb*2, 2, 2, 1 if val else 0)
 
-def setGhostBlock(xb, yb):
-  thumby.display.drawFilledRectangle(xb*2, yb*2, 2, 2, display.DARKGRAY)
+def setGhostBlock(xb, yb, val):
+  if not val:
+    thumby.display.drawFilledRectangle(xb*2, yb*2, 2, 2, display.DARKGRAY)
 
 def updateScreen(showGhost = False, ghostPos = None):
   #print("update")
@@ -143,12 +144,12 @@ def updateScreen(showGhost = False, ghostPos = None):
   if showGhost:
       x = ghostPos % B_COLS
       y = ghostPos // B_COLS
-      setGhostBlock(x + 2, y-1)
+      setGhostBlock(x + 2, y-1, board[y * B_COLS + x])
       for i in shape[1:]:
           p = i + ghostPos
           x = p % B_COLS
           y = p // B_COLS
-          setGhostBlock(x + 2, y-1)
+          setGhostBlock(x + 2, y-1, board[y * B_COLS + x])
 
   # Update points and level*/
   #while (lines_cleared >= 10):
